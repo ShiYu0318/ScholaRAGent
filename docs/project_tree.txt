@@ -1,0 +1,22 @@
+.
+├── LICENSE
+├── README.md
+├── config
+├── data
+│   └── arxiv_20260308_0702.txt
+├── docs
+│   └── project_tree.txt
+├── main.py
+├── pyproject.toml
+├── scripts
+│   └── update_tree.sh
+├── src
+│   ├── crawlers
+│   │   ├── __init__.py
+│   │   ├── arxiv_crawler.py
+│   │   └── base_crawler.py
+│   └── utils
+│       └── logger.py
+└── uv.lock
+
+8 directories, 12 files
