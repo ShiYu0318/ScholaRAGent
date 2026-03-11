@@ -6,10 +6,10 @@ from src.utils.logger import get_logger
 logger = get_logger("Main")
 
 async def main():
-    crawler = ArxivCrawler(headless=True)
+    crawler = ArxivCrawler(headless=False)
     
     logger.info("抓取 arXiv 最新論文")
-    papers = await crawler.fetch_latest_papers(limit=50)
+    papers = await crawler.fetch_latest_papers(limit=100)
     
     if not papers:
         logger.warning("未取得任何資料")
