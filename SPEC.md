@@ -141,7 +141,7 @@ uv run python main.py        # 啟動 bot
 
 ## 已擴充實作（超出 MVP，對應 README roadmap）
 
-MVP 主線之外，roadmap 的多數項目已實作並以離線測試覆蓋（`tests/`，共 76 個測試，
+MVP 主線之外，roadmap 的多數項目已實作並以離線測試覆蓋（`tests/`，共 93 個測試，
 `uv run pytest` 全綠）。以下為新增模組與能力：
 
 ### 新增模組
@@ -151,9 +151,9 @@ MVP 主線之外，roadmap 的多數項目已實作並以離線測試覆蓋（`t
 | `src/rag/chunker.py`、`vector_store` 強化 | 6 | 長文 chunking、評分檢索、metadata 過濾、詞彙 rerank |
 | `src/memory/memory_store.py` | 7 | 長期記憶：動態過濾 + LLM 壓縮 |
 | `groq_client.compare_papers` | 8 | 多文件方法比較表 |
-| `src/crawlers/hackernews_crawler.py`、`github_crawler.py`、`reddit_crawler.py` | 2 | 免金鑰公開來源爬蟲（HN / GitHub / Reddit） |
+| `src/crawlers/`：`hackernews`、`github`、`reddit`、`news` | 2 | 免金鑰公開來源爬蟲（HN / GitHub / Reddit / 新聞 RSS） |
 | `src/notify/`（telegram/email/line + dispatcher） | 9 | 多平台推送抽象層 |
-| `src/recommend/ranker.py` | 10/14 | 互動加權 + 新鮮度的推薦排序 |
+| `src/recommend/ranker.py`、`reward.py` | 10/14 | 互動加權排序 + 從成對偏好學習權重的獎勵模型 |
 | `groq_client.latex_draft/review_suggestions/slides_outline` | 11 | 研究助理 |
 | `src/tools/`、`src/agent/tool_agent.py` | 12 | 工具呼叫框架 + 本地任務排程 |
 | `src/analysis/trends.py`、`lstm_forecaster.py` | 13 | 關鍵字時序 + 預測（LSTM／移動平均／線性） |
@@ -188,9 +188,10 @@ GITHUB_TOKEN=            # 選填，提高 GitHub API 額度
 ### 務實取捨（可日後升級）
 - **趨勢預測（Week13）**：已提供 LSTM 滑動視窗（`forecast(method="lstm")`），
   另保留移動平均／線性外推；序列過短時自動回退。
-- **排序優化（Week14）**：目前為互動加權的輕量獎勵模型，尚非完整 RLHF。
+- **排序優化（Week14）**：以 Bradley–Terry 偏好獎勵模型（`reward.py`）從成對互動學習
+  各 action 權重，再餵給 ranker；屬 RLHF 的獎勵建模概念，尚未加上線上策略更新的完整迴圈。
 
 ### 測試
 ```bash
-uv run pytest        # 76 passed，全離線（fake embedder / stub client / 注入 transport）
+uv run pytest        # 93 passed，全離線（fake embedder / stub client / 注入 transport）
 ```

@@ -40,12 +40,11 @@
 | 11 | 05/05 | Research Assistant | Generate LaTeX paper drafts, review suggestions, presentations, or research proposals | [x] |
 | 12 | 05/12 | MCP / Tool Calling | Function-calling framework + local tools (search, trends, task scheduling) | [x]² |
 | 13 | 05/19 | Keyword Trend Prediction | Keyword timeseries + sliding-window forecast (LSTM, plus moving-average / linear) | [x] |
-| 14 | 06/02 | RLHF | Interaction-weighted reward → dynamic recommendation ranking | [x]³ |
-| 15 | 06/02 | Integration, Optimization, Testing | Module integration and an offline pytest suite (76 tests) | [x] |
+| 14 | 06/02 | RLHF | Bradley–Terry preference reward model learns action weights from pairwise interactions to optimize ranking | [x] |
+| 15 | 06/02 | Integration, Optimization, Testing | Module integration and an offline pytest suite (93 tests) | [x] |
 | 16 | 06/09 | Final Presentation | Demo and presentation | [ ] |
 
 **Notes**
 - ¹ Telegram / Email / LINE adapters and dispatcher are implemented and unit-tested with injected transports; **live delivery needs the user's own tokens/SMTP credentials in `config/.env`** (see SPEC).
 - ² Tool-calling uses Groq's OpenAI-compatible function calling with local, credential-free tools. External Google Docs/Calendar can plug into the same registry later.
-- ³ Ranking is a lightweight interaction-reward model, not full RLHF — structured to upgrade later. (Trend forecasting now includes an LSTM sliding-window model alongside moving-average / linear.)
-- Hacker News, GitHub-trending and Reddit (public JSON, no OAuth for reads) crawlers are implemented; X (Twitter) remains on the roadmap (no free public read API, credential-gated).
+- Crawlers implemented (all credential-free): arXiv, Hacker News, GitHub-trending, Reddit (public JSON) and AI news (public RSS). **X (Twitter)** remains the only source on the roadmap — no free public read API, so it is credential-gated.
