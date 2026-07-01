@@ -28,6 +28,7 @@ from src.rag.retrievers.multi_query import MultiQueryRetriever
 from src.rag.retrievers.reranker import CrossEncoderReranker
 from src.rag.semantic_cache import SemanticCache
 from src.rag.citations import format_citations
+from src.agent.deep_research import DeepResearcher
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
 
@@ -224,6 +225,27 @@ def build_bot():
         report, papers = await build_report(topic)
         await interaction.followup.send(
             f"📑 **主題研究報告：{topic}**（取自 arXiv {len(papers)} 篇相關論文）"
+        )
+        for chunk in _split(report):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="deepresearch", description="深度研究：拆解子題、逐一檢索並合成含引用的綜述")
+    @discord.app_commands.describe(topic="想深入研究的主題")
+    async def deepresearch_cmd(interaction: discord.Interaction, topic: str):
+        if not topic.strip():
+            await interaction.response.send_message("用法：`/deepresearch 你的主題`", ephemeral=True)
+            return
+        await interaction.response.defer(thinking=True)
+
+        def _deep_retrieve(query, k=4):
+            papers = crawler.search_topic(query, limit=k)
+            _persist(papers, source_name="arxiv")
+            return [(p, 1.0) for p in papers]
+
+        researcher = DeepResearcher(llm, _deep_retrieve, QueryTransformer(llm))
+        report, papers = await asyncio.to_thread(researcher.run, topic)
+        await interaction.followup.send(
+            f"🔬 **深度研究：{topic}**（跨 {len(papers)} 篇論文）"
         )
         for chunk in _split(report):
             await interaction.channel.send(chunk)
