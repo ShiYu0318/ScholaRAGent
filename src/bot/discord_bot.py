@@ -12,6 +12,7 @@ from src.crawlers.arxiv_crawler import ArxivCrawler
 from src.crawlers.github_crawler import GitHubCrawler
 from src.crawlers.hackernews_crawler import HackerNewsCrawler
 from src.crawlers.reddit_crawler import RedditCrawler
+from src.crawlers.news_crawler import NewsCrawler
 from src.db.database import Database
 from src.llm.groq_client import GroqClient
 from src.memory.memory_store import MemoryStore
@@ -59,6 +60,7 @@ def build_bot():
     hn_crawler = HackerNewsCrawler()
     gh_crawler = GitHubCrawler(token=config.GITHUB_TOKEN or None)
     reddit_crawler = RedditCrawler()
+    news_crawler = NewsCrawler()
     llm = GroqClient()
     store = VectorStore()
     db = Database()
@@ -264,7 +266,8 @@ def build_bot():
         def _work():
             items = (hn_crawler.fetch_ai_stories(limit=3)
                      + gh_crawler.fetch_trending(limit=3)
-                     + reddit_crawler.fetch_ai_discussions(limit_per_sub=2))
+                     + reddit_crawler.fetch_ai_discussions(limit_per_sub=2)
+                     + news_crawler.fetch_ai_news(limit=3))
             _persist(items, source_name="web")
             return items
         items = await asyncio.to_thread(_work)
