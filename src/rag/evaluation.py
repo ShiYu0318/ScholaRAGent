@@ -49,3 +49,29 @@ def faithfulness(answer, contexts):
     for c in contexts:
         ctx |= _tokens(c)
     return len(ans & ctx) / len(ans)
+
+
+def citation_accuracy(answer, chunks):
+    """片段級引用準確度（A8 [REF:id] 用），meetGRAG 精神。
+
+    - valid_ratio：答案中的 [REF:id] 有多少比例對應到真實 chunk（來源/語法正確）。
+    - grounded_ratio：有效引用中，被引 chunk 內容與答案有詞彙重疊的比例（有據）。
+    - score：同時有效且有據的引用比例（越高越可信）。
+    """
+    from src.rag.chunk_citations import extract_refs
+
+    refs = extract_refs(answer)
+    if not refs:
+        return {"score": 0.0, "valid_ratio": 0.0, "grounded_ratio": 0.0, "n_refs": 0}
+
+    by_id = {c["id"]: c for c in chunks}
+    ans_tokens = _tokens(answer)
+    valid = [r for r in refs if r in by_id]
+    grounded = [r for r in valid if _tokens(by_id[r].get("text", "")) & ans_tokens]
+
+    return {
+        "score": len(grounded) / len(refs),
+        "valid_ratio": len(valid) / len(refs),
+        "grounded_ratio": len(grounded) / len(valid) if valid else 0.0,
+        "n_refs": len(refs),
+    }
