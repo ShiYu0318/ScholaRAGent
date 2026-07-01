@@ -29,17 +29,23 @@
 |-----|------|-----------|--------|-----------|
 | 1 | 02/24 | Project Planning | Topic selection, feature brainstorming, architecture design, and project scheduling | [x] |
 | 2 | 03/03 | Web Crawler Development | Python Selenium for automated data collection | [x] |
-| 3 | 03/10 | Relational Database | Data cleaning and PostgreSQL storage | [ ] |
-| 4 | 03/17 | LLM-based Summarization | LLM API integration and system prompt design | [ ] |
-| 5 | 03/24 | Discord Bot | discord.py implementation and slash commands | [ ] |
-| 6 | 03/31 | RAG Implementation | Embeddings, Vector DB (FAISS), chunking, reranking, metadata filtering | [ ] |
-| 7 | 04/07 | Memory Module | Memory management system and context engineering | [ ] |
-| 8 | 04/14 | Multi-document Analysis | Compare methods across multiple papers or projects and generate performance comparison tables | [ ] |
-| 9 | 04/21 | Multi-platform Notifications | LINE Bot, Telegram Bot, Email integration | [ ] |
-| 10 | 04/28 | Interaction System | Track user behavior: CTR, dwell time, likes, subscriptions, ratings, questions, and shares | [ ] |
-| 11 | 05/05 | Research Assistant | Generate LaTeX paper drafts, review suggestions, presentations, or research proposals | [ ] |
-| 12 | 05/12 | MCP / Tool Calling | Integrate external tools such as Google Docs, Calendar, Email, etc. | [ ] |
-| 13 | 05/19 | Keyword Trend Prediction | Use LSTM and sliding window for forecasting future technology trends | [ ] |
-| 14 | 06/02 | RLHF | Design reward functions based on user interactions to dynamically optimize recommendations and ranking weights | [ ] |
-| 15 | 06/02 | Integration, Optimization, Testing | Module integration, performance optimization, and system testing | [ ] |
+| 3 | 03/10 | Relational Database | Data cleaning and SQLite storage (papers + interactions) | [x] |
+| 4 | 03/17 | LLM-based Summarization | LLM API integration and system prompt design | [x] |
+| 5 | 03/24 | Discord Bot | discord.py implementation and slash commands | [x] |
+| 6 | 03/31 | RAG Implementation | Embeddings, Vector DB (FAISS), chunking, reranking, metadata filtering | [x] |
+| 7 | 04/07 | Memory Module | Memory management system and context engineering | [x] |
+| 8 | 04/14 | Multi-document Analysis | Compare methods across multiple papers or projects and generate performance comparison tables | [x] |
+| 9 | 04/21 | Multi-platform Notifications | LINE Bot, Telegram Bot, Email integration | [x]¹ |
+| 10 | 04/28 | Interaction System | Track user behavior: CTR, dwell time, likes, subscriptions, ratings, questions, and shares | [x] |
+| 11 | 05/05 | Research Assistant | Generate LaTeX paper drafts, review suggestions, presentations, or research proposals | [x] |
+| 12 | 05/12 | MCP / Tool Calling | Function-calling framework + local tools (search, trends, task scheduling) | [x]² |
+| 13 | 05/19 | Keyword Trend Prediction | Keyword timeseries + sliding-window forecast (moving-average / linear) | [x]³ |
+| 14 | 06/02 | RLHF | Interaction-weighted reward → dynamic recommendation ranking | [x]³ |
+| 15 | 06/02 | Integration, Optimization, Testing | Module integration and an offline pytest suite (76 tests) | [x] |
 | 16 | 06/09 | Final Presentation | Demo and presentation | [ ] |
+
+**Notes**
+- ¹ Telegram / Email / LINE adapters and dispatcher are implemented and unit-tested with injected transports; **live delivery needs the user's own tokens/SMTP credentials in `config/.env`** (see SPEC).
+- ² Tool-calling uses Groq's OpenAI-compatible function calling with local, credential-free tools. External Google Docs/Calendar can plug into the same registry later.
+- ³ Pragmatic first version: trend forecasting is statistical (moving-average / linear), not yet LSTM; ranking is a lightweight interaction-reward model, not full RLHF. Both are structured to upgrade later.
+- X (Twitter) / Reddit crawlers remain on the roadmap (credential-gated); Hacker News and GitHub-trending crawlers are implemented.

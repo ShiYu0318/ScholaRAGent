@@ -136,3 +136,60 @@ uv run python main.py        # 啟動 bot
 5. 執行 `/report multi-agent reinforcement learning` → 得到含「主題概述／重點論文／趨勢／總結」的報告。
 6. 執行 `/set_push_time 9 30` → 回覆已設定 09:30，`data/schedule.json` 生成；用 `/help` 確認顯示新時間。
 7. 將推送時間設為近一兩分鐘後，驗證自動推送觸發。
+
+---
+
+## 已擴充實作（超出 MVP，對應 README roadmap）
+
+MVP 主線之外，roadmap 的多數項目已實作並以離線測試覆蓋（`tests/`，共 76 個測試，
+`uv run pytest` 全綠）。以下為新增模組與能力：
+
+### 新增模組
+| 模組 | 對應 Week | 說明 |
+| --- | --- | --- |
+| `src/db/database.py` | 3 | SQLite 關聯式儲存：論文 + 互動事件（標準庫，無外部依賴） |
+| `src/rag/chunker.py`、`vector_store` 強化 | 6 | 長文 chunking、評分檢索、metadata 過濾、詞彙 rerank |
+| `src/memory/memory_store.py` | 7 | 長期記憶：動態過濾 + LLM 壓縮 |
+| `groq_client.compare_papers` | 8 | 多文件方法比較表 |
+| `src/crawlers/hackernews_crawler.py`、`github_crawler.py` | 2 | 免金鑰公開來源爬蟲 |
+| `src/notify/`（telegram/email/line + dispatcher） | 9 | 多平台推送抽象層 |
+| `src/recommend/ranker.py` | 10/14 | 互動加權 + 新鮮度的推薦排序 |
+| `groq_client.latex_draft/review_suggestions/slides_outline` | 11 | 研究助理 |
+| `src/tools/`、`src/agent/tool_agent.py` | 12 | 工具呼叫框架 + 本地任務排程 |
+| `src/analysis/trends.py` | 13 | 關鍵字時序 + 移動平均/線性預測 |
+
+### 新增斜線指令
+`/compare <主題>`、`/trends`、`/sources`、`/latex <主題>`、`/slides <主題>`、
+`/review <文字>`、`/like <id>`、`/agent <請求>`（自然語言工具呼叫）。
+
+### 新增設定（`config/.env`，皆選填）
+```
+# 多平台推送（未填則自動略過該平台）
+TELEGRAM_BOT_TOKEN=      # BotFather 取得
+TELEGRAM_CHAT_ID=
+SMTP_HOST=               # Email（SMTP）
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+EMAIL_TO=                # 逗號分隔多收件者
+LINE_CHANNEL_TOKEN=      # LINE Messaging API（LINE Notify 已停用）
+LINE_TO=
+GITHUB_TOKEN=            # 選填，提高 GitHub API 額度
+```
+
+### 需使用者提供憑證才能實測（尚未 end-to-end 驗證）
+- **多平台推送**（Telegram/Email/LINE）：程式與單元測試（注入式 transport）已完成，
+  但**實際送達需你在 `config/.env` 填入對應金鑰**。
+- **X (Twitter) / Reddit 爬蟲**：仍在 roadmap，需 API 憑證，尚未實作。
+- **Google Docs / Calendar 工具**：目前工具呼叫為本地免憑證工具（查論文/趨勢/待辦），
+  外部服務可日後接進同一 `ToolRegistry`。
+
+### 務實取捨（可日後升級）
+- **趨勢預測（Week13）**：目前為統計法（移動平均／線性外推），尚未用 LSTM。
+- **排序優化（Week14）**：目前為互動加權的輕量獎勵模型，尚非完整 RLHF。
+
+### 測試
+```bash
+uv run pytest        # 76 passed，全離線（fake embedder / stub client / 注入 transport）
+```

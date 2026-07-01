@@ -37,9 +37,6 @@ CREATE INDEX IF NOT EXISTS idx_interactions_action ON interactions(action);
 CREATE INDEX IF NOT EXISTS idx_papers_published    ON papers(published);
 """
 
-_PAPER_FIELDS = ("id", "title", "abstract", "authors", "link", "published", "summary", "source")
-
-
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
