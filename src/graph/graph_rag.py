@@ -45,6 +45,17 @@ def summarize_communities(graph, llm):
     return out
 
 
+def influential_papers(graph, top_n=10):
+    """用 PageRank 找引用圖中最具影響力的節點（C7）。
+
+    引用邊指向被引論文，故被大量引用者 PageRank 高。回傳 [(node, score)] 降序。
+    """
+    if graph.number_of_nodes() == 0:
+        return []
+    pr = nx.pagerank(graph)
+    return sorted(pr.items(), key=lambda it: it[1], reverse=True)[:top_n]
+
+
 def neighborhood(graph, seed, hops=1):
     """回傳種子概念 hops 跳內的節點集合（無向擴展）；不存在回空集合。"""
     if seed not in graph:
