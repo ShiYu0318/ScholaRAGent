@@ -22,6 +22,9 @@ from src.agent.tool_agent import ToolAgent
 from src.tools.builtins import build_default_registry
 from src.tools.task_manager import TaskManager
 from src.rag.vector_store import VectorStore
+from src.rag.retrievers.hybrid import HybridRetriever
+from src.rag.query_transform import QueryTransformer
+from src.rag.retrievers.multi_query import MultiQueryRetriever
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
 
@@ -69,6 +72,17 @@ def build_bot():
     memory = MemoryStore()
     task_manager = TaskManager()
     tool_registry = build_default_registry(store=store, task_manager=task_manager)
+
+    # 進階檢索（v2/A2）：混合檢索 + 多查詢改寫，供 /ask 使用
+    hybrid = HybridRetriever(store)
+    advanced_retriever = MultiQueryRetriever(QueryTransformer(llm), hybrid.retrieve)
+
+    def _advanced_search(question, k=4):
+        """多查詢改寫 + 混合檢索。每次重建 BM25 索引以對齊最新論文。"""
+        if store.index.ntotal == 0:
+            return []
+        hybrid.index()
+        return advanced_retriever.search(question, k=k)
 
     def _persist(papers, source_name="arxiv"):
         """統一寫入向量庫、SQLite 與人類可讀備份。"""
@@ -170,7 +184,7 @@ def build_bot():
             await interaction.response.send_message("用法：`/ask 你的問題`", ephemeral=True)
             return
         await interaction.response.defer(thinking=True)
-        papers = store.search(question, k=4)
+        papers = await asyncio.to_thread(_advanced_search, question, 4)
         answer = await asyncio.to_thread(llm.answer, question, papers)
         # 記錄使用者互動與長期記憶（供推薦排序 / 個人化）
         uid = interaction.user.id

@@ -13,3 +13,5 @@ data
 diff.patch
 .gitignore
 SPEC.md
+docs/
+scripts/
