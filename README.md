@@ -39,7 +39,7 @@
 | 10 | 04/28 | Interaction System | Track user behavior: CTR, dwell time, likes, subscriptions, ratings, questions, and shares | [x] |
 | 11 | 05/05 | Research Assistant | Generate LaTeX paper drafts, review suggestions, presentations, or research proposals | [x] |
 | 12 | 05/12 | MCP / Tool Calling | Function-calling framework + local tools (search, trends, task scheduling) | [x]² |
-| 13 | 05/19 | Keyword Trend Prediction | Keyword timeseries + sliding-window forecast (moving-average / linear) | [x]³ |
+| 13 | 05/19 | Keyword Trend Prediction | Keyword timeseries + sliding-window forecast (LSTM, plus moving-average / linear) | [x] |
 | 14 | 06/02 | RLHF | Interaction-weighted reward → dynamic recommendation ranking | [x]³ |
 | 15 | 06/02 | Integration, Optimization, Testing | Module integration and an offline pytest suite (76 tests) | [x] |
 | 16 | 06/09 | Final Presentation | Demo and presentation | [ ] |
@@ -47,5 +47,5 @@
 **Notes**
 - ¹ Telegram / Email / LINE adapters and dispatcher are implemented and unit-tested with injected transports; **live delivery needs the user's own tokens/SMTP credentials in `config/.env`** (see SPEC).
 - ² Tool-calling uses Groq's OpenAI-compatible function calling with local, credential-free tools. External Google Docs/Calendar can plug into the same registry later.
-- ³ Pragmatic first version: trend forecasting is statistical (moving-average / linear), not yet LSTM; ranking is a lightweight interaction-reward model, not full RLHF. Both are structured to upgrade later.
-- X (Twitter) / Reddit crawlers remain on the roadmap (credential-gated); Hacker News and GitHub-trending crawlers are implemented.
+- ³ Ranking is a lightweight interaction-reward model, not full RLHF — structured to upgrade later. (Trend forecasting now includes an LSTM sliding-window model alongside moving-average / linear.)
+- Hacker News, GitHub-trending and Reddit (public JSON, no OAuth for reads) crawlers are implemented; X (Twitter) remains on the roadmap (no free public read API, credential-gated).

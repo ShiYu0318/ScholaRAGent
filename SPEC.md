@@ -151,12 +151,12 @@ MVP 主線之外，roadmap 的多數項目已實作並以離線測試覆蓋（`t
 | `src/rag/chunker.py`、`vector_store` 強化 | 6 | 長文 chunking、評分檢索、metadata 過濾、詞彙 rerank |
 | `src/memory/memory_store.py` | 7 | 長期記憶：動態過濾 + LLM 壓縮 |
 | `groq_client.compare_papers` | 8 | 多文件方法比較表 |
-| `src/crawlers/hackernews_crawler.py`、`github_crawler.py` | 2 | 免金鑰公開來源爬蟲 |
+| `src/crawlers/hackernews_crawler.py`、`github_crawler.py`、`reddit_crawler.py` | 2 | 免金鑰公開來源爬蟲（HN / GitHub / Reddit） |
 | `src/notify/`（telegram/email/line + dispatcher） | 9 | 多平台推送抽象層 |
 | `src/recommend/ranker.py` | 10/14 | 互動加權 + 新鮮度的推薦排序 |
 | `groq_client.latex_draft/review_suggestions/slides_outline` | 11 | 研究助理 |
 | `src/tools/`、`src/agent/tool_agent.py` | 12 | 工具呼叫框架 + 本地任務排程 |
-| `src/analysis/trends.py` | 13 | 關鍵字時序 + 移動平均/線性預測 |
+| `src/analysis/trends.py`、`lstm_forecaster.py` | 13 | 關鍵字時序 + 預測（LSTM／移動平均／線性） |
 
 ### 新增斜線指令
 `/compare <主題>`、`/trends`、`/sources`、`/latex <主題>`、`/slides <主題>`、
@@ -181,12 +181,13 @@ GITHUB_TOKEN=            # 選填，提高 GitHub API 額度
 ### 需使用者提供憑證才能實測（尚未 end-to-end 驗證）
 - **多平台推送**（Telegram/Email/LINE）：程式與單元測試（注入式 transport）已完成，
   但**實際送達需你在 `config/.env` 填入對應金鑰**。
-- **X (Twitter) / Reddit 爬蟲**：仍在 roadmap，需 API 憑證，尚未實作。
+- **X (Twitter) 爬蟲**：無免費公開讀取 API，需憑證，尚未實作。（Reddit 已用公開 `.json` 端點實作，免 OAuth。）
 - **Google Docs / Calendar 工具**：目前工具呼叫為本地免憑證工具（查論文/趨勢/待辦），
   外部服務可日後接進同一 `ToolRegistry`。
 
 ### 務實取捨（可日後升級）
-- **趨勢預測（Week13）**：目前為統計法（移動平均／線性外推），尚未用 LSTM。
+- **趨勢預測（Week13）**：已提供 LSTM 滑動視窗（`forecast(method="lstm")`），
+  另保留移動平均／線性外推；序列過短時自動回退。
 - **排序優化（Week14）**：目前為互動加權的輕量獎勵模型，尚非完整 RLHF。
 
 ### 測試
