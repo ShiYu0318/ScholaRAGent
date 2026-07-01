@@ -7,8 +7,14 @@ import discord
 from discord.ext import commands, tasks
 
 from src import config
+from src.analysis import trends
 from src.crawlers.arxiv_crawler import ArxivCrawler
+from src.crawlers.github_crawler import GitHubCrawler
+from src.crawlers.hackernews_crawler import HackerNewsCrawler
+from src.db.database import Database
 from src.llm.groq_client import GroqClient
+from src.memory.memory_store import MemoryStore
+from src.notify import dispatcher
 from src.rag.vector_store import VectorStore
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
@@ -46,8 +52,20 @@ def build_bot():
     bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
     crawler = ArxivCrawler(query=config.ARXIV_QUERY)
+    hn_crawler = HackerNewsCrawler()
+    gh_crawler = GitHubCrawler(token=config.GITHUB_TOKEN or None)
     llm = GroqClient()
     store = VectorStore()
+    db = Database()
+    memory = MemoryStore()
+
+    def _persist(papers, source_name="arxiv"):
+        """統一寫入向量庫、SQLite 與人類可讀備份。"""
+        if not papers:
+            return
+        store.add(papers)
+        db.upsert_papers(papers)
+        save_to_text(papers, source_name=source_name)
 
     async def collect_and_summarize(limit):
         """背景執行緒跑爬蟲＋摘要＋寫入向量庫，回傳含摘要的論文清單。"""
@@ -55,9 +73,7 @@ def build_bot():
             papers = crawler.fetch_latest_papers(limit=limit)
             for p in papers:
                 p["summary"] = llm.summarize(p)
-            if papers:
-                store.add(papers)
-                save_to_text(papers, source_name="arxiv")
+            _persist(papers, source_name="arxiv")
             return papers
 
         return await asyncio.to_thread(_work)
@@ -73,6 +89,13 @@ def build_bot():
         embed.set_footer(text=f"arXiv {paper['id']} · {paper['published']}")
         return embed
 
+    def _digest_text(papers):
+        """組出給 Telegram/Email/LINE 的純文字摘要。"""
+        lines = [f"📰 今日 AI 論文（{config.ARXIV_QUERY}）"]
+        for i, p in enumerate(papers, 1):
+            lines.append(f"\n{i}. {p['title']}\n{p.get('summary', p['abstract'])[:200]}\n{p['link']}")
+        return "\n".join(lines)
+
     async def push_daily(channel):
         await channel.send(f"📰 **今日 AI 論文推送**（{config.ARXIV_QUERY}）")
         papers = await collect_and_summarize(config.DAILY_COUNT)
@@ -81,15 +104,18 @@ def build_bot():
             return
         for p in papers:
             await channel.send(embed=paper_embed(p))
+        # 同步廣播到其他已設定的平台（未設定則自動略過）
+        results = await asyncio.to_thread(dispatcher.broadcast, _digest_text(papers))
+        if results:
+            ok = [k for k, v in results.items() if v]
+            await channel.send(f"📡 已同步推送到：{', '.join(ok) if ok else '（其他平台發送失敗）'}")
         await channel.send("✅ 推送完成，可用 `/ask <問題>` 針對論文發問。")
 
     async def build_report(topic):
         """背景搜尋主題相關論文、寫入向量庫，並產生研究報告。"""
         def _work():
             papers = crawler.search_topic(topic, limit=config.REPORT_COUNT)
-            if papers:
-                store.add(papers)
-                save_to_text(papers, source_name="arxiv")
+            _persist(papers, source_name="arxiv")
             report = llm.research_report(topic, papers)
             return report, papers
 
@@ -135,6 +161,11 @@ def build_bot():
         await interaction.response.defer(thinking=True)
         papers = store.search(question, k=4)
         answer = await asyncio.to_thread(llm.answer, question, papers)
+        # 記錄使用者互動與長期記憶（供推薦排序 / 個人化）
+        uid = interaction.user.id
+        memory.add(uid, question, kind="query")
+        for p in papers:
+            db.log_interaction("ask", paper_id=p.get("id"), user_id=uid)
         chunks = _split(answer)
         await interaction.followup.send(chunks[0])
         for chunk in chunks[1:]:
@@ -168,6 +199,81 @@ def build_bot():
             f"✅ 已設定每日自動推送時間為 **{hour:02d}:{minute:02d}**（UTC+{config.PUSH_TZ_OFFSET}）。"
         )
 
+    @bot.tree.command(name="compare", description="輸入主題，跨多篇論文產生方法比較表")
+    @discord.app_commands.describe(topic="想比較的主題")
+    async def compare_cmd(interaction: discord.Interaction, topic: str):
+        await interaction.response.defer(thinking=True)
+        def _work():
+            papers = crawler.search_topic(topic, limit=min(config.REPORT_COUNT, 5))
+            _persist(papers, source_name="arxiv")
+            return llm.compare_papers(papers), papers
+        result, papers = await asyncio.to_thread(_work)
+        await interaction.followup.send(f"🆚 **多文件比較：{topic}**（{len(papers)} 篇）")
+        for chunk in _split(result):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="trends", description="分析已收錄論文的上升關鍵字趨勢")
+    async def trends_cmd(interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        rising = await asyncio.to_thread(trends.trending_keywords, store.papers, 10)
+        if not rising:
+            await interaction.followup.send("目前資料不足以分析趨勢，請先用 `/daily` 或 `/report` 收錄更多論文。")
+            return
+        lines = ["📈 **上升中的關鍵字**（依成長斜率）"]
+        lines += [f"{i}. `{kw}`（斜率 {slope:.2f}）" for i, (kw, slope) in enumerate(rising, 1)]
+        await interaction.followup.send("\n".join(lines))
+
+    @bot.tree.command(name="latex", description="依主題產生 LaTeX 論文草稿骨架")
+    @discord.app_commands.describe(topic="論文主題")
+    async def latex_cmd(interaction: discord.Interaction, topic: str):
+        await interaction.response.defer(thinking=True)
+        papers = store.search(topic, k=5)
+        draft = await asyncio.to_thread(llm.latex_draft, topic, papers)
+        await interaction.followup.send(f"📝 **LaTeX 草稿：{topic}**")
+        for chunk in _split(f"```latex\n{draft}\n```"):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="slides", description="依主題產生簡報大綱")
+    @discord.app_commands.describe(topic="簡報主題")
+    async def slides_cmd(interaction: discord.Interaction, topic: str):
+        await interaction.response.defer(thinking=True)
+        papers = store.search(topic, k=5)
+        outline = await asyncio.to_thread(llm.slides_outline, topic, papers)
+        await interaction.followup.send(f"🎞️ **簡報大綱：{topic}**")
+        for chunk in _split(outline):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="review", description="貼上段落，取得論文審閱建議")
+    @discord.app_commands.describe(text="要審閱的文字")
+    async def review_cmd(interaction: discord.Interaction, text: str):
+        await interaction.response.defer(thinking=True)
+        suggestions = await asyncio.to_thread(llm.review_suggestions, text)
+        for chunk in _split(suggestions):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="sources", description="抓取 Hacker News 與 GitHub 上的熱門 AI 內容")
+    async def sources_cmd(interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        def _work():
+            items = hn_crawler.fetch_ai_stories(limit=3) + gh_crawler.fetch_trending(limit=3)
+            _persist(items, source_name="web")
+            return items
+        items = await asyncio.to_thread(_work)
+        if not items:
+            await interaction.followup.send("目前沒有抓到內容（可能是網路或 API 限制）。")
+            return
+        await interaction.followup.send(f"🌐 **HN / GitHub 熱門 AI 內容**（{len(items)} 則）")
+        for it in items:
+            await interaction.channel.send(f"**[{it['source']}]** {it['title']}\n{it['link']}")
+
+    @bot.tree.command(name="like", description="標記你喜歡的論文（用 arXiv id），用於優化推薦")
+    @discord.app_commands.describe(paper_id="論文 id，例如 2401.01234 或 hn-123")
+    async def like_cmd(interaction: discord.Interaction, paper_id: str):
+        db.log_interaction("like", paper_id=paper_id.strip(), user_id=interaction.user.id, value=3.0)
+        await interaction.response.send_message(
+            f"👍 已記錄你對 `{paper_id}` 的喜好，之後推薦會更貼近你的興趣。", ephemeral=True
+        )
+
     @bot.tree.command(name="help", description="顯示 AIR Agent 指令說明")
     async def help_cmd(interaction: discord.Interaction):
         hour, minute = _load_schedule()
@@ -175,6 +281,13 @@ def build_bot():
         embed.add_field(name="/daily", value="立即抓取並推送今日 AI 論文", inline=False)
         embed.add_field(name="/ask <問題>", value="依據已收錄論文回答你的問題", inline=False)
         embed.add_field(name="/report <主題>", value="自動蒐集相關論文並產生完整研究報告", inline=False)
+        embed.add_field(name="/compare <主題>", value="跨多篇論文產生方法比較表", inline=False)
+        embed.add_field(name="/trends", value="分析已收錄論文的上升關鍵字趨勢", inline=False)
+        embed.add_field(name="/sources", value="抓取 Hacker News 與 GitHub 熱門 AI 內容", inline=False)
+        embed.add_field(name="/latex <主題>", value="產生 LaTeX 論文草稿骨架", inline=False)
+        embed.add_field(name="/slides <主題>", value="產生簡報大綱", inline=False)
+        embed.add_field(name="/review <文字>", value="取得論文審閱建議", inline=False)
+        embed.add_field(name="/like <id>", value="標記喜歡的論文以優化推薦", inline=False)
         embed.add_field(
             name="/set_push_time <時> <分>",
             value=f"設定每日自動推送時間（目前 {hour:02d}:{minute:02d}，UTC+{config.PUSH_TZ_OFFSET}）",
