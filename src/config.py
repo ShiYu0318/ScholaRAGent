@@ -33,6 +33,8 @@ REPORT_COUNT = int(os.getenv("REPORT_COUNT", "8"))  # 主題報告檢索的論�
 
 # --- RAG ---
 EMBED_MODEL = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
+RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+RERANK_ENABLED = os.getenv("RERANK_ENABLED", "0") in ("1", "true", "True")
 INDEX_PATH = DATA_DIR / "faiss.index"
 METADATA_PATH = DATA_DIR / "metadata.json"
 SCHEDULE_PATH = DATA_DIR / "schedule.json"  # 持久化使用者設定的推送時間

@@ -25,6 +25,7 @@ from src.rag.vector_store import VectorStore
 from src.rag.retrievers.hybrid import HybridRetriever
 from src.rag.query_transform import QueryTransformer
 from src.rag.retrievers.multi_query import MultiQueryRetriever
+from src.rag.retrievers.reranker import CrossEncoderReranker
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
 
@@ -73,16 +74,21 @@ def build_bot():
     task_manager = TaskManager()
     tool_registry = build_default_registry(store=store, task_manager=task_manager)
 
-    # 進階檢索（v2/A2）：混合檢索 + 多查詢改寫，供 /ask 使用
+    # 進階檢索（v2/A2）：混合檢索 + 多查詢改寫；（A3）可選 BGE 精排，供 /ask 使用
     hybrid = HybridRetriever(store)
     advanced_retriever = MultiQueryRetriever(QueryTransformer(llm), hybrid.retrieve)
+    reranker = CrossEncoderReranker() if config.RERANK_ENABLED else None
 
     def _advanced_search(question, k=4):
-        """多查詢改寫 + 混合檢索。每次重建 BM25 索引以對齊最新論文。"""
+        """多查詢改寫 + 混合檢索（+ 可選 cross-encoder 精排）。每次重建 BM25 索引。"""
         if store.index.ntotal == 0:
             return []
         hybrid.index()
-        return advanced_retriever.search(question, k=k)
+        if reranker is None:
+            return advanced_retriever.search(question, k=k)
+        # 過取候選再用 cross-encoder 精排到前 k
+        cands = advanced_retriever.retrieve(question, k=max(k * 3, 10))
+        return [p for p, _ in reranker.rerank(question, cands, k=k)]
 
     def _persist(papers, source_name="arxiv"):
         """統一寫入向量庫、SQLite 與人類可讀備份。"""
