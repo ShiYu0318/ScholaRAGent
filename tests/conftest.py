@@ -1,12 +1,19 @@
 """共用測試工具：離線用的 FakeEmbedder 與資料路徑隔離。"""
+import hashlib
+
 import numpy as np
 import pytest
+
+
+def _stable_hash(token):
+    """跨 process 穩定的雜湊（內建 hash() 受 PYTHONHASHSEED 影響會使測試不穩）。"""
+    return int(hashlib.md5(token.encode("utf-8")).hexdigest(), 16)
 
 
 class FakeEmbedder:
     """不需下載模型的假 embedder：以詞袋雜湊產生正規化向量，具決定性。"""
 
-    def __init__(self, dim=32):
+    def __init__(self, dim=64):
         self.dim = dim
 
     def encode(self, texts):
@@ -14,7 +21,7 @@ class FakeEmbedder:
         for text in texts:
             v = np.zeros(self.dim, dtype="float32")
             for tok in str(text).lower().split():
-                v[hash(tok) % self.dim] += 1.0
+                v[_stable_hash(tok) % self.dim] += 1.0
             norm = np.linalg.norm(v)
             if norm > 0:
                 v /= norm
