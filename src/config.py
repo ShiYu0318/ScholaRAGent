@@ -1,4 +1,4 @@
-"""集中讀取 config/.env 的設定。"""
+"""集中讀取專案根目錄 .env 的設定。"""
 import os
 from pathlib import Path
 
@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 # 專案根目錄 = 本檔案的上上層 (src/config.py -> src -> repo root)
 ROOT_DIR = Path(__file__).resolve().parent.parent
-ENV_PATH = ROOT_DIR / "config" / ".env"
+ENV_PATH = ROOT_DIR / ".env"
 DATA_DIR = ROOT_DIR / "data"
 
 load_dotenv(ENV_PATH)

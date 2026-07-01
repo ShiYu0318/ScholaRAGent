@@ -90,7 +90,7 @@ search — no paid embedding API required.
 
 ```
 main.py                      # Entry point: launch the Discord bot
-config/.env                  # Secrets & settings (not version-controlled)
+.env                  # Secrets & settings (not version-controlled)
 src/
   config.py                  # Loads .env settings
   crawlers/                  # arxiv, hackernews, github, reddit, news (RSS), twitter
@@ -121,13 +121,13 @@ data/                        # faiss.index, metadata.json, SQLite db, etc. (gene
 
 ```bash
 uv sync                       # install dependencies (includes PyTorch; first run is slow)
-cp config/.env.example config/.env   # then fill in your keys (see below)
+cp .env.example .env   # then fill in your keys (see below)
 uv run python main.py         # start the bot
 ```
 
 ## ⚙️ Configuration
 
-Settings live in `config/.env` (never committed). Required keys are marked; everything else is
+Settings live in `.env` (never committed). Required keys are marked; everything else is
 optional and safely skipped when unset.
 
 | Variable | Required | Description |

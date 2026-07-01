@@ -8,10 +8,10 @@ logger = get_logger("Main")
 
 def main():
     if not config.DISCORD_BOT_TOKEN:
-        logger.error("缺少 DISCORD_BOT_TOKEN，請在 config/.env 設定")
+        logger.error("缺少 DISCORD_BOT_TOKEN，請在 .env 設定")
         return
     if not config.GROQ_API_KEY:
-        logger.error("缺少 GROQ_API_KEY，請在 config/.env 設定")
+        logger.error("缺少 GROQ_API_KEY，請在 .env 設定")
         return
 
     bot = build_bot()
