@@ -50,3 +50,42 @@ def test_research_report_without_papers(monkeypatch):
     out = client.research_report("some topic", [])
     assert "some topic" in out
     assert cap == {}
+
+
+def test_compare_papers_needs_two(monkeypatch):
+    cap = {}
+    client = _client(monkeypatch, cap)
+    out = client.compare_papers([make_paper("1", "only one")])
+    assert "至少需要 2 篇" in out
+    assert cap == {}
+
+
+def test_compare_papers_builds_table_prompt(monkeypatch):
+    cap = {}
+    client = _client(monkeypatch, cap)
+    client.compare_papers([make_paper("1", "Paper A"), make_paper("2", "Paper B")])
+    assert "Paper A" in cap["user"] and "Paper B" in cap["user"]
+    assert "核心方法" in cap["system"]  # 要求輸出比較表欄位
+
+
+def test_latex_draft_prompt(monkeypatch):
+    cap = {}
+    client = _client(monkeypatch, cap)
+    client.latex_draft("multi-agent RL", [make_paper("1", "Ref Paper")])
+    assert "multi-agent RL" in cap["user"]
+    assert "Ref Paper" in cap["user"]
+    assert "LaTeX" in cap["system"]
+
+
+def test_review_suggestions_empty(monkeypatch):
+    cap = {}
+    client = _client(monkeypatch, cap)
+    assert "請提供" in client.review_suggestions("   ")
+    assert cap == {}
+
+
+def test_slides_outline_prompt(monkeypatch):
+    cap = {}
+    client = _client(monkeypatch, cap)
+    client.slides_outline("RAG systems")
+    assert "RAG systems" in cap["user"]

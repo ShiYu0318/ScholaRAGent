@@ -84,3 +84,84 @@ class GroqClient:
         except Exception as e:
             self.logger.error(f"產生報告失敗: {e}")
             return f"產生報告時發生錯誤：{e}"
+
+    def compare_papers(self, papers):
+        """跨多篇論文做方法比較，產出 Markdown 比較表 + 分析（Week8）。"""
+        if len(papers) < 2:
+            return "多文件比較至少需要 2 篇論文，請先用 `/report` 或 `/daily` 收錄更多論文。"
+
+        context = "\n\n".join(
+            f"[{i}] 標題：{p['title']}\n作者：{p.get('authors', '')}\n"
+            f"發表：{p.get('published', '')}\n摘要：{p['abstract']}"
+            for i, p in enumerate(papers, 1)
+        )
+        system = (
+            "你是資深 AI 研究分析師。請『僅根據』以下論文，用繁體中文產出一份多文件比較分析。"
+            "格式需求：\n"
+            "1. 先給一個 Markdown 表格，欄位為：| 論文 | 解決的問題 | 核心方法 | 主要優勢 | 限制/前提 |，"
+            "每篇論文一列，內容精煉（各格 20 字內）。\n"
+            "2. 表格後用 ## 綜合比較 段落，指出這些方法的共通點、關鍵差異與取捨。\n"
+            "3. 最後用 ## 選用建議 說明在什麼情境下該選哪一種方法。\n"
+            "務實、聚焦，不要客套話。論文以編號 [n] 對應。"
+        )
+        user = f"=== 待比較論文 ===\n{context}"
+        try:
+            return self._chat(system, user, temperature=0.4, max_tokens=2000)
+        except Exception as e:
+            self.logger.error(f"比較分析失敗: {e}")
+            return f"產生比較分析時發生錯誤：{e}"
+
+    # ---- 研究助理（Week11）----
+    def latex_draft(self, topic, papers=None):
+        """產生一份可編譯的 LaTeX 論文草稿骨架（含相關工作段落）。"""
+        refs = ""
+        if papers:
+            refs = "\n".join(f"- {p['title']}（{p.get('link', '')}）" for p in papers)
+        system = (
+            "你是學術寫作助手。請輸出一份『可直接編譯』的 LaTeX 論文草稿，使用 article 類別，"
+            "包含 \\title、\\author、\\begin{abstract}、以及 Introduction / Related Work / "
+            "Method / Experiments / Conclusion 各 \\section 與占位內容。"
+            "內文用英文，摘要 3-4 句。只輸出 LaTeX 原始碼，不要額外說明或 Markdown 圍欄。"
+        )
+        user = f"Topic: {topic}"
+        if refs:
+            user += f"\n\n可參考的相關論文：\n{refs}"
+        try:
+            return self._chat(system, user, temperature=0.5, max_tokens=1800)
+        except Exception as e:
+            self.logger.error(f"LaTeX 草稿失敗: {e}")
+            return f"產生 LaTeX 草稿時發生錯誤：{e}"
+
+    def review_suggestions(self, text):
+        """對使用者提供的段落/摘要給出審閱建議。"""
+        if not text.strip():
+            return "請提供要審閱的文字內容。"
+        system = (
+            "你是嚴謹的論文審閱人。請用繁體中文，針對以下文字給出結構化審閱意見："
+            "## 優點、## 待改進（條列，聚焦論述清晰度、方法嚴謹性、實驗完整性）、"
+            "## 具體修改建議（可操作）。務實直接，不要客套。"
+        )
+        try:
+            return self._chat(system, f"=== 待審閱文字 ===\n{text}", max_tokens=1200)
+        except Exception as e:
+            self.logger.error(f"審閱建議失敗: {e}")
+            return f"產生審閱建議時發生錯誤：{e}"
+
+    def slides_outline(self, topic, papers=None):
+        """產生簡報大綱（每張投影片標題 + 重點）。"""
+        context = ""
+        if papers:
+            context = "\n".join(f"- {p['title']}" for p in papers)
+        system = (
+            "你是簡報設計助手。請用繁體中文，為指定主題產出 8-10 張投影片的大綱，"
+            "每張用 `### 第N張：標題` 開頭，下面 2-4 個重點條列。"
+            "涵蓋動機、背景、方法、比較、結論與未來方向。"
+        )
+        user = f"主題：{topic}"
+        if context:
+            user += f"\n\n可涵蓋的相關論文：\n{context}"
+        try:
+            return self._chat(system, user, temperature=0.5, max_tokens=1500)
+        except Exception as e:
+            self.logger.error(f"簡報大綱失敗: {e}")
+            return f"產生簡報大綱時發生錯誤：{e}"
