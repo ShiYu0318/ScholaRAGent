@@ -12,3 +12,4 @@ node_modules
 data
 diff.patch
 .gitignore
+SPEC.md
