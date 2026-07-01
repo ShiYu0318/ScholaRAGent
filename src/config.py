@@ -43,4 +43,21 @@ DB_PATH = DATA_DIR / "air_agent.db"
 # --- 記憶模組 ---
 MEMORY_PATH = DATA_DIR / "memory.json"
 
+# --- 多平台推送（Week9，皆選填；未填則自動略過該平台）---
+# Telegram：BotFather 取得 token；chat_id 可用 @userinfobot 查
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+# Email（SMTP）
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", "")
+EMAIL_TO = os.getenv("EMAIL_TO", "")  # 逗號分隔多個收件者
+# LINE Messaging API（LINE Notify 已停用）
+LINE_CHANNEL_TOKEN = os.getenv("LINE_CHANNEL_TOKEN", "")
+LINE_TO = os.getenv("LINE_TO", "")
+# 額外爬蟲
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # 選填，提高 GitHub API 額度
+
 DATA_DIR.mkdir(exist_ok=True)
