@@ -43,6 +43,9 @@ DB_PATH = DATA_DIR / "air_agent.db"
 # --- 記憶模組 ---
 MEMORY_PATH = DATA_DIR / "memory.json"
 
+# --- 工具呼叫（Week12）---
+TASKS_PATH = DATA_DIR / "tasks.json"
+
 # --- 多平台推送（Week9，皆選填；未填則自動略過該平台）---
 # Telegram：BotFather 取得 token；chat_id 可用 @userinfobot 查
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
