@@ -29,6 +29,7 @@ from src.rag.retrievers.reranker import CrossEncoderReranker
 from src.rag.semantic_cache import SemanticCache
 from src.rag.citations import format_citations
 from src.agent.deep_research import DeepResearcher
+from src.tools.research_tools import to_bibtex, literature_review, explain_paper
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
 
@@ -248,6 +249,64 @@ def build_bot():
             f"🔬 **深度研究：{topic}**（跨 {len(papers)} 篇論文）"
         )
         for chunk in _split(report):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="litreview", description="文獻綜述：蒐集相關論文並生成含研究缺口的綜述草稿")
+    @discord.app_commands.describe(topic="想回顧的研究主題")
+    async def litreview_cmd(interaction: discord.Interaction, topic: str):
+        if not topic.strip():
+            await interaction.response.send_message("用法：`/litreview 你的主題`", ephemeral=True)
+            return
+        await interaction.response.defer(thinking=True)
+
+        def _work():
+            papers = crawler.search_topic(topic, limit=config.REPORT_COUNT)
+            _persist(papers, source_name="arxiv")
+            return literature_review(topic, papers, llm), papers
+
+        review, papers = await asyncio.to_thread(_work)
+        await interaction.followup.send(f"📝 **文獻綜述：{topic}**（{len(papers)} 篇）")
+        for chunk in _split(review):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="bibtex", description="蒐集相關論文並匯出 BibTeX 引用")
+    @discord.app_commands.describe(topic="主題（將取相關論文匯出）")
+    async def bibtex_cmd(interaction: discord.Interaction, topic: str):
+        if not topic.strip():
+            await interaction.response.send_message("用法：`/bibtex 你的主題`", ephemeral=True)
+            return
+        await interaction.response.defer(thinking=True)
+
+        def _work():
+            papers = crawler.search_topic(topic, limit=config.REPORT_COUNT)
+            _persist(papers, source_name="arxiv")
+            return to_bibtex(papers)
+
+        bib = await asyncio.to_thread(_work)
+        for chunk in _split(f"```bibtex\n{bib}\n```"):
+            await interaction.channel.send(chunk)
+
+    @bot.tree.command(name="explain", description="深讀導覽：白話講解某主題最相關的一篇論文")
+    @discord.app_commands.describe(topic="想弄懂的主題或論文關鍵字")
+    async def explain_cmd(interaction: discord.Interaction, topic: str):
+        if not topic.strip():
+            await interaction.response.send_message("用法：`/explain 主題`", ephemeral=True)
+            return
+        await interaction.response.defer(thinking=True)
+
+        def _work():
+            papers = crawler.search_topic(topic, limit=1)
+            _persist(papers, source_name="arxiv")
+            if not papers:
+                return None, None
+            return papers[0], explain_paper(papers[0], llm)
+
+        paper, explanation = await asyncio.to_thread(_work)
+        if paper is None:
+            await interaction.followup.send("找不到相關論文。")
+            return
+        await interaction.followup.send(f"📖 **深讀：{paper.get('title', '')}**")
+        for chunk in _split(explanation):
             await interaction.channel.send(chunk)
 
     @bot.tree.command(name="set_push_time", description="設定每日自動推送的時間（24 小時制，本地時區）")
