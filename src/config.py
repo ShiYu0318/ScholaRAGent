@@ -62,5 +62,6 @@ LINE_CHANNEL_TOKEN = os.getenv("LINE_CHANNEL_TOKEN", "")
 LINE_TO = os.getenv("LINE_TO", "")
 # 額外爬蟲
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # 選填，提高 GitHub API 額度
+X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "")  # X (Twitter) API v2，需付費方案
 
 DATA_DIR.mkdir(exist_ok=True)

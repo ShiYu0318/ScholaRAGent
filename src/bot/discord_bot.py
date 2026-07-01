@@ -13,6 +13,7 @@ from src.crawlers.github_crawler import GitHubCrawler
 from src.crawlers.hackernews_crawler import HackerNewsCrawler
 from src.crawlers.reddit_crawler import RedditCrawler
 from src.crawlers.news_crawler import NewsCrawler
+from src.crawlers.twitter_crawler import TwitterCrawler
 from src.db.database import Database
 from src.llm.groq_client import GroqClient
 from src.memory.memory_store import MemoryStore
@@ -61,6 +62,7 @@ def build_bot():
     gh_crawler = GitHubCrawler(token=config.GITHUB_TOKEN or None)
     reddit_crawler = RedditCrawler()
     news_crawler = NewsCrawler()
+    twitter_crawler = TwitterCrawler(bearer_token=config.X_BEARER_TOKEN or None)
     llm = GroqClient()
     store = VectorStore()
     db = Database()
@@ -268,6 +270,8 @@ def build_bot():
                      + gh_crawler.fetch_trending(limit=3)
                      + reddit_crawler.fetch_ai_discussions(limit_per_sub=2)
                      + news_crawler.fetch_ai_news(limit=3))
+            if twitter_crawler.enabled:  # 僅在有 bearer token 時才查 X
+                items += twitter_crawler.fetch_recent(limit=3)
             _persist(items, source_name="web")
             return items
         items = await asyncio.to_thread(_work)
