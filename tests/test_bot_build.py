@@ -27,5 +27,5 @@ def test_build_bot_registers_all_commands(monkeypatch, tmp_path):
     bot = discord_bot.build_bot()
     names = {c.name for c in bot.tree.get_commands()}
     expected = {"daily", "ask", "report", "compare", "trends", "sources",
-                "latex", "slides", "review", "like", "set_push_time", "help"}
+                "latex", "slides", "review", "like", "agent", "set_push_time", "help"}
     assert expected <= names

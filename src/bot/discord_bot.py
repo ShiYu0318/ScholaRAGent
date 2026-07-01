@@ -15,6 +15,9 @@ from src.db.database import Database
 from src.llm.groq_client import GroqClient
 from src.memory.memory_store import MemoryStore
 from src.notify import dispatcher
+from src.agent.tool_agent import ToolAgent
+from src.tools.builtins import build_default_registry
+from src.tools.task_manager import TaskManager
 from src.rag.vector_store import VectorStore
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
@@ -58,6 +61,8 @@ def build_bot():
     store = VectorStore()
     db = Database()
     memory = MemoryStore()
+    task_manager = TaskManager()
+    tool_registry = build_default_registry(store=store, task_manager=task_manager)
 
     def _persist(papers, source_name="arxiv"):
         """統一寫入向量庫、SQLite 與人類可讀備份。"""
@@ -274,6 +279,15 @@ def build_bot():
             f"👍 已記錄你對 `{paper_id}` 的喜好，之後推薦會更貼近你的興趣。", ephemeral=True
         )
 
+    @bot.tree.command(name="agent", description="用自然語言請助理查論文、看趨勢或管理待辦（工具呼叫）")
+    @discord.app_commands.describe(request="你的請求，例如：幫我找 multi-agent 的論文並加一則待辦")
+    async def agent_cmd(interaction: discord.Interaction, request: str):
+        await interaction.response.defer(thinking=True)
+        agent = ToolAgent(llm.client, tool_registry, config.GROQ_MODEL)
+        reply = await asyncio.to_thread(agent.run, request)
+        for chunk in _split(reply):
+            await interaction.channel.send(chunk)
+
     @bot.tree.command(name="help", description="顯示 AIR Agent 指令說明")
     async def help_cmd(interaction: discord.Interaction):
         hour, minute = _load_schedule()
@@ -288,6 +302,7 @@ def build_bot():
         embed.add_field(name="/slides <主題>", value="產生簡報大綱", inline=False)
         embed.add_field(name="/review <文字>", value="取得論文審閱建議", inline=False)
         embed.add_field(name="/like <id>", value="標記喜歡的論文以優化推薦", inline=False)
+        embed.add_field(name="/agent <請求>", value="自然語言助理，可查論文/看趨勢/管理待辦", inline=False)
         embed.add_field(
             name="/set_push_time <時> <分>",
             value=f"設定每日自動推送時間（目前 {hour:02d}:{minute:02d}，UTC+{config.PUSH_TZ_OFFSET}）",
