@@ -1,23 +1,23 @@
-import asyncio
-from src.crawlers.arxiv_crawler import ArxivCrawler
-from src.utils.file_manager import save_to_text
+"""AIR Agent 進入點：啟動 Discord bot。"""
+from src import config
+from src.bot.discord_bot import build_bot
 from src.utils.logger import get_logger
 
 logger = get_logger("Main")
 
-async def main():
-    crawler = ArxivCrawler(headless=False)
-    
-    logger.info("抓取 arXiv 最新論文")
-    papers = await crawler.fetch_latest_papers(limit=100)
-    
-    if not papers:
-        logger.warning("未取得任何資料")
+
+def main():
+    if not config.DISCORD_BOT_TOKEN:
+        logger.error("缺少 DISCORD_BOT_TOKEN，請在 config/.env 設定")
+        return
+    if not config.GROQ_API_KEY:
+        logger.error("缺少 GROQ_API_KEY，請在 config/.env 設定")
         return
 
-    save_to_text(papers, source_name="arxiv")
-    
-    logger.info("執行完畢")
+    bot = build_bot()
+    logger.info("啟動 AIR Agent Discord bot…")
+    bot.run(config.DISCORD_BOT_TOKEN)
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

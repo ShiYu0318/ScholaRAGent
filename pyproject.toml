@@ -13,4 +13,19 @@ dependencies = [
     "pymupdf>=1.27.1",
     "pytest-playwright>=0.7.2",
     "requests>=2.32.5",
+    "discord.py>=2.4.0",
+    "faiss-cpu>=1.9.0",
+    "sentence-transformers>=3.3.0",
+    "python-dotenv>=1.0.1",
+    "python-pptx>=1.0.2",
 ]
+
+[dependency-groups]
+dev = [
+    "python-docx>=1.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--import-mode=prepend"
