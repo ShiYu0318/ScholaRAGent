@@ -25,13 +25,21 @@ def _lexical_overlap(query_tokens, doc_text):
 
 
 class VectorStore:
-    def __init__(self, embedder=None):
+    def __init__(self, embedder=None, index_type=None, hnsw_m=None):
         self.logger = get_logger(self.__class__.__name__)
         self.embedder = embedder or Embedder()
-        self.index = faiss.IndexFlatIP(self.embedder.dim)
+        self.index_type = index_type or config.INDEX_TYPE
+        self.hnsw_m = hnsw_m or config.HNSW_M
+        self.index = self._new_index(self.embedder.dim)
         self.papers = []          # 與 index 向量一一對應的論文 metadata
         self._ids = set()         # 已收錄的 arxiv id，用於去重
         self.load()
+
+    def _new_index(self, dim):
+        """建立向量索引：flat=精確暴力搜尋；hnsw=近似最近鄰（大量論文更快）。"""
+        if self.index_type == "hnsw":
+            return faiss.IndexHNSWFlat(dim, self.hnsw_m, faiss.METRIC_INNER_PRODUCT)
+        return faiss.IndexFlatIP(dim)
 
     def add(self, papers):
         """加入新論文（依 arxiv id 去重），回傳實際新增的清單。"""

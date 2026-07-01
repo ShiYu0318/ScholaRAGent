@@ -94,6 +94,33 @@ def test_load_keeps_index_when_dimension_matches(isolated_data):
     assert {p["id"] for p in reloaded.papers} == {"1"}
 
 
+def test_default_index_is_flat(fake_embedder, isolated_data):
+    import faiss
+    store = VectorStore(embedder=fake_embedder)
+    assert isinstance(store.index, faiss.IndexFlatIP)
+
+
+def test_hnsw_index_type_builds_hnsw_and_searches(fake_embedder, isolated_data):
+    import faiss
+    store = VectorStore(embedder=fake_embedder, index_type="hnsw")
+    assert isinstance(store.index, faiss.IndexHNSWFlat)
+    store.add([make_paper("1", "graph neural networks"),
+               make_paper("2", "quantum error correction")])
+    res = store.search("graph neural networks", k=1)
+    assert res[0]["id"] == "1"
+
+
+def test_hnsw_persistence_roundtrip(fake_embedder, isolated_data):
+    import faiss
+    store = VectorStore(embedder=fake_embedder, index_type="hnsw")
+    store.add([make_paper("1", "graph neural networks"),
+               make_paper("2", "language models")])
+    reloaded = VectorStore(embedder=fake_embedder, index_type="hnsw")
+    assert isinstance(reloaded.index, faiss.IndexHNSWFlat)
+    assert reloaded.index.ntotal == 2
+    assert {p["id"] for p in reloaded.papers} == {"1", "2"}
+
+
 def test_lexical_helpers():
     assert _tokenize("Multi-Agent RL!") == {"multi", "agent", "rl"}
     assert _lexical_overlap({"agent"}, "agent based model") > 0
