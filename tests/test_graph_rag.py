@@ -1,4 +1,4 @@
-"""GraphRAG 社群偵測 + 圖檢索（v2/C3,C4），離線 networkx + stub。"""
+"""GraphRAG 社群偵測 + 圖檢索，離線 networkx + stub。"""
 import networkx as nx
 
 from src.graph.graph_rag import (
@@ -20,7 +20,7 @@ class StubLLM:
         return "SUMMARY"
 
 
-# --- C3 ---
+# ------
 
 def test_detect_communities_groups_connected_nodes():
     comms = detect_communities(_two_clusters())
@@ -37,7 +37,7 @@ def test_summarize_communities_returns_summary_per_group():
     assert all(item["nodes"] for item in out)
 
 
-# --- C4 ---
+# ------
 
 def test_neighborhood_within_hops():
     g = nx.DiGraph()

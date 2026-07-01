@@ -1,4 +1,4 @@
-"""嵌入快取（E3）：包一層 embedder，重複文字不重算，省時省成本。
+"""嵌入快取：包一層 embedder，重複文字不重算，省時省成本。
 
 介面與 Embedder 相同（`encode(list[str]) -> ndarray`、`dim`），可直接替換注入。
 """

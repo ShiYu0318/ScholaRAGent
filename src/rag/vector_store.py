@@ -106,7 +106,7 @@ class VectorStore:
         if config.INDEX_PATH.exists() and config.METADATA_PATH.exists():
             try:
                 saved = faiss.read_index(str(config.INDEX_PATH))
-                # 若 embedding 模型換過（維度不同，如 all-MiniLM 384 → bge-m3 1024），
+                # 若 embedding 模型換過（維度不同，如 all-MiniLM 384 -> bge-m3 1024），
                 # 舊 index 不相容，丟棄並以新維度重建，避免檢索崩潰。
                 if saved.d != self.embedder.dim:
                     self.logger.warning(

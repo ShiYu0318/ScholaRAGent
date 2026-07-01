@@ -1,4 +1,4 @@
-"""查詢可觀測性（E2）：把每次問答的查詢/命中/延遲寫成 JSONL，供 /stats 分析。"""
+"""查詢可觀測性：把每次問答的查詢/命中/延遲寫成 JSONL，供 /stats 分析。"""
 import json
 
 from src.utils.logger import get_logger

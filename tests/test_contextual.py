@@ -1,4 +1,4 @@
-"""Contextual chunk embedding（v2/A7），離線 stub LLM。"""
+"""Contextual chunk embedding，離線 stub LLM。"""
 from src.rag.contextual import contextualize_chunk, contextualize_all
 
 

@@ -1,4 +1,4 @@
-"""BGE cross-encoder 重排序（Advanced RAG / A3）。
+"""BGE cross-encoder 重排序。
 
 第一階段（向量 + BM25 混合）先過取候選，這裡用 cross-encoder 對
 (query, 文件) 直接打分做精排——比雙塔嵌入更準，但較慢，故只排前段候選。

@@ -1,4 +1,4 @@
-"""Eval testset builder（Advanced RAG / E8，受 meetGRAG 啟發）。
+"""Eval testset builder。
 
 從收錄的論文自動生成「黃金問答題組」：對每篇論文請 LLM 出可由該篇回答的問題，
 以該篇為正解文件（relevant）。產出可直接餵 [eval_harness].evaluate_retrieval
@@ -9,7 +9,7 @@ import re
 from src.utils.logger import get_logger
 
 _logger = get_logger("testset_builder")
-_NUM = re.compile(r"^\s*(?:\d+[.)、]|[-*•])\s*")
+_NUM = re.compile(r"^\s*(?:\d+[.)、]|[-*])\s*")
 
 _SYSTEM = (
     "根據這篇論文，出 {n} 個「能由本篇內容回答」的檢索問題，每行一個、"

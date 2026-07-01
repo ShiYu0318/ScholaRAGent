@@ -1,4 +1,4 @@
-"""簡單的本地任務排程器（Week12）：協助使用者記錄與組織待辦，持久化為 JSON。
+"""簡單的本地任務排程器：協助使用者記錄與組織待辦，持久化為 JSON。
 
 外部行事曆 / Google Docs 整合需憑證，這裡先提供不需外部服務的本地實作，
 之後可再接上真正的 Calendar/Docs API。
@@ -37,7 +37,7 @@ class TaskManager:
         if not items:
             return "目前沒有待辦事項。"
         return "\n".join(
-            f"#{t['id']} {'✅' if t['done'] else '⬜'} {t['title']}"
+            f"#{t['id']} {'' if t['done'] else ''} {t['title']}"
             + (f"（截止 {t['due']}）" if t["due"] else "")
             for t in items
         )

@@ -1,4 +1,4 @@
-"""引用準確度指標（v2/E6，meetGRAG 啟發）。"""
+"""引用準確度指標。"""
 from src.rag.evaluation import citation_accuracy
 
 

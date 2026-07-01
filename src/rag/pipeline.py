@@ -1,11 +1,11 @@
-"""Modular RAG 可組合管線（Advanced RAG / A10）。
+"""Modular RAG 可組合管線。
 
 把 RAG 各步驟抽象成「stage：state -> state」，用 RAGPipeline 自由組裝／重排／
 增減，實現 Modular RAG 的核心精神——同一套模組能組成不同流程（例如
-查詢轉換→混合檢索→精排→生成，或省略某步、換不同檢索器）。
+查詢轉換->混合檢索->精排->生成，或省略某步、換不同檢索器）。
 
 state 是一個 dict，慣例鍵：query / papers / answer。stage factories 把既有元件
-（檢索器、reranker、LLM）包成 stage，彼此解耦、好測。
+包成 stage，彼此解耦、好測。
 """
 from src.utils.logger import get_logger
 

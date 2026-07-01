@@ -1,4 +1,4 @@
-"""檢索評估 harness（E1）：把 A6 指標套用到黃金題組，做回歸驗證。
+"""檢索評估 harness：把 指標套用到黃金題組，做回歸驗證。
 
 dataset：[{"query": str, "relevant": [id, ...]}, ...]
 retrieve：retrieve(query, k) -> [(paper, score)]（paper 需有 "id"）。

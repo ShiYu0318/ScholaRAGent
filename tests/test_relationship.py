@@ -1,4 +1,4 @@
-"""論文關係分析（v2/C8，paper_master 啟發），離線 stub。"""
+"""論文關係分析，離線 stub。"""
 from src.graph.relationship import analyze_relationship, KNOWN_RELATIONS
 
 

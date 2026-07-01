@@ -1,4 +1,4 @@
-"""概念圖視覺化匯出（v2/C5）。"""
+"""概念圖視覺化匯出。"""
 import networkx as nx
 
 from src.graph.visualize import to_mermaid

@@ -1,4 +1,4 @@
-"""深度研究模式（v2/B4），離線 stub。"""
+"""深度研究模式，離線 stub。"""
 from src.agent.deep_research import DeepResearcher
 
 

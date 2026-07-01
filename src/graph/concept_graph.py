@@ -1,8 +1,8 @@
-"""概念知識圖抽取（GraphRAG / C2）。
+"""概念知識圖抽取。
 
 讓 LLM 從論文摘要抽出 (head | relation | tail) 三元組（如 方法/資料集/任務/指標
 之間的關係），彙整成 networkx 有向圖。邊上記錄出處論文 id，供之後圖檢索、
-社群摘要（C3）與路徑推理（C4）使用。離線可用 stub LLM 測試抽取與建圖。
+社群摘要與路徑推理使用。離線可用 stub LLM 測試抽取與建圖。
 """
 import networkx as nx
 

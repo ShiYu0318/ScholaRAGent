@@ -1,4 +1,4 @@
-"""Corrective RAG（v2/B3），離線 stub。"""
+"""Corrective RAG，離線 stub。"""
 from src.agent.corrective_rag import corrective_retrieve
 
 

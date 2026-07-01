@@ -1,4 +1,4 @@
-"""Adaptive-RAG（v2/B6）：依問題複雜度選檢索策略，離線。"""
+"""Adaptive-RAG：依問題複雜度選檢索策略，離線。"""
 from src.agent.adaptive_rag import classify_complexity, adaptive_retrieve
 
 

@@ -1,4 +1,4 @@
-"""引用網路建構（v2/C6，paper_master 啟發），離線 stub client。"""
+"""引用網路建構，離線 stub client。"""
 from src.graph.citation_network import build_citation_graph
 
 

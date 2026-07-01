@@ -1,4 +1,4 @@
-"""Modular RAG 可組合管線（v2/A10）。"""
+"""Modular RAG 可組合管線。"""
 from src.rag.pipeline import (
     RAGPipeline, retrieve_stage, rerank_stage, generate_stage,
 )

@@ -1,4 +1,4 @@
-"""多金鑰輪替（v2/E7，meetGRAG 啟發），注入時鐘，離線。"""
+"""多金鑰輪替，注入時鐘，離線。"""
 import pytest
 
 from src.llm.key_rotator import KeyRotator

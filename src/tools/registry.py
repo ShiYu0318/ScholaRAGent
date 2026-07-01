@@ -1,4 +1,4 @@
-"""工具註冊表（Week12）：把本地 Python 函式暴露成 OpenAI 相容的 tool schema，
+"""工具註冊表：把本地 Python 函式暴露成 OpenAI 相容的 tool schema，
 供 Groq function calling 呼叫。"""
 import json
 

@@ -1,4 +1,4 @@
-"""引用圖 PageRank 影響力（v2/C7）。"""
+"""引用圖 PageRank 影響力。"""
 import networkx as nx
 
 from src.graph.graph_rag import influential_papers
@@ -7,7 +7,7 @@ from src.graph.graph_rag import influential_papers
 def test_ranks_most_cited_node_first():
     g = nx.DiGraph()
     for citing in ("A", "B", "C"):
-        g.add_edge(citing, "S")      # 三篇都引用 S → S 入度最高
+        g.add_edge(citing, "S")      # 三篇都引用 S -> S 入度最高
     out = influential_papers(g, top_n=1)
     assert out[0][0] == "S"
 

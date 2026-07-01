@@ -1,4 +1,4 @@
-"""長期記憶模組：管理、動態過濾與壓縮（Week7）。
+"""長期記憶模組：管理、動態過濾與壓縮。
 
 每則記憶是 {user_id, kind, content, ts}。提供依種類/關鍵字/近期的動態過濾，
 以及當某使用者記憶過多時，用注入的 summarizer 把較舊記憶壓縮成一則摘要，
@@ -67,7 +67,7 @@ class MemoryStore:
         compressed = {"kind": "summary", "content": summary_text, "ts": _now()}
         self._mem[uid] = [compressed] + recent
         self.save()
-        self.logger.info(f"使用者 {uid} 記憶壓縮：{len(old)} 則 → 1 則摘要")
+        self.logger.info(f"使用者 {uid} 記憶壓縮：{len(old)} 則 -> 1 則摘要")
         return True
 
     def context_block(self, user_id, limit=10):

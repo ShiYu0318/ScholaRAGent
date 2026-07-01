@@ -1,4 +1,4 @@
-"""偏好獎勵模型（Week14 升級）：從使用者互動的成對偏好學習各 action 權重。
+"""偏好獎勵模型：從使用者互動的成對偏好學習各 action 權重。
 
 概念貼近 RLHF 的獎勵建模：以「使用者對 A 的偏好大於 B」的成對比較，
 用 logistic（Bradley–Terry）線上更新權重，讓學到的權重取代 ranker 的固定權重。
@@ -39,7 +39,7 @@ class PreferenceRewardModel:
         """一次成對更新：讓 preferred 的分數高於 other。回傳這步的 loss。"""
         vp, vo = self._vec(preferred), self._vec(other)
         diff = self.weights @ (vp - vo)
-        # 目標 P(preferred≻other)=sigmoid(diff)→1；梯度上升
+        # 目標 P(preferred≻other)=sigmoid(diff)->1；梯度上升
         grad = _sigmoid(-diff)
         self.weights += lr * (grad * (vp - vo) - self.l2 * self.weights)
         return -np.log(_sigmoid(diff) + 1e-9)

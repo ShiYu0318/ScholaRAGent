@@ -1,4 +1,4 @@
-"""本地行事曆匯出（Week12）：產生標準 iCalendar (.ics) 事件，免任何外部服務。
+"""本地行事曆匯出：產生標準 iCalendar (.ics) 事件，免任何外部服務。
 
 使用者可把產生的 .ics 匯入 Google Calendar / Apple 行事曆 / Outlook。
 真正的 Google Calendar API（直接寫入雲端）需 OAuth 憑證，可日後接進同一工具介面。

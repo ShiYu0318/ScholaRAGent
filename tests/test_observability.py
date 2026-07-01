@@ -1,4 +1,4 @@
-"""查詢可觀測性日誌（v2/E2）。"""
+"""查詢可觀測性日誌。"""
 from src.utils.query_log import log_query, read_queries, summarize
 
 

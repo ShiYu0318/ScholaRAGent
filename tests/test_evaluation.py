@@ -1,4 +1,4 @@
-"""RAG 離線評估指標（v2/A6）。"""
+"""RAG 離線評估指標。"""
 from src.rag.evaluation import (
     precision_at_k, recall, reciprocal_rank, faithfulness,
 )
@@ -9,7 +9,7 @@ def test_precision_at_k():
 
 
 def test_precision_at_k_truncates_to_k():
-    assert precision_at_k(["a", "b", "c"], {"a"}, k=2) == 0.5   # 前2=a,b → 1/2
+    assert precision_at_k(["a", "b", "c"], {"a"}, k=2) == 0.5   # 前2=a,b -> 1/2
 
 
 def test_recall():

@@ -78,11 +78,11 @@ def build_bot():
     task_manager = TaskManager()
     tool_registry = build_default_registry(store=store, task_manager=task_manager)
 
-    # 進階檢索（v2/A2）：混合檢索 + 多查詢改寫；（A3）可選 BGE 精排，供 /ask 使用
+    # 進階檢索：混合檢索 + 多查詢改寫；可選 BGE 精排，供 /ask 使用
     hybrid = HybridRetriever(store)
     advanced_retriever = MultiQueryRetriever(QueryTransformer(llm), hybrid.retrieve)
     reranker = CrossEncoderReranker() if config.RERANK_ENABLED else None
-    answer_cache = SemanticCache(store.embedder, threshold=0.95)  # A5 語意快取
+    answer_cache = SemanticCache(store.embedder, threshold=0.95)  # 語意快取
 
     def _advanced_search(question, k=4):
         """多查詢改寫 + 混合檢索（+ 可選 cross-encoder 精排）。每次重建 BM25 索引。"""
@@ -127,16 +127,16 @@ def build_bot():
 
     def _digest_text(papers):
         """組出給 Telegram/Email/LINE 的純文字摘要。"""
-        lines = [f"📰 今日 AI 論文（{config.ARXIV_QUERY}）"]
+        lines = [f"今日 AI 論文（{config.ARXIV_QUERY}）"]
         for i, p in enumerate(papers, 1):
             lines.append(f"\n{i}. {p['title']}\n{p.get('summary', p['abstract'])[:200]}\n{p['link']}")
         return "\n".join(lines)
 
     async def push_daily(channel):
-        await channel.send(f"📰 **今日 AI 論文推送**（{config.ARXIV_QUERY}）")
+        await channel.send(f"**今日 AI 論文推送**（{config.ARXIV_QUERY}）")
         papers = await collect_and_summarize(config.DAILY_COUNT)
         if not papers:
-            await channel.send("⚠️ 今天沒有抓到論文。")
+            await channel.send("今天沒有抓到論文。")
             return
         for p in papers:
             await channel.send(embed=paper_embed(p))
@@ -144,8 +144,8 @@ def build_bot():
         results = await asyncio.to_thread(dispatcher.broadcast, _digest_text(papers))
         if results:
             ok = [k for k, v in results.items() if v]
-            await channel.send(f"📡 已同步推送到：{', '.join(ok) if ok else '（其他平台發送失敗）'}")
-        await channel.send("✅ 推送完成，可用 `/ask <問題>` 針對論文發問。")
+            await channel.send(f"已同步推送到：{', '.join(ok) if ok else '（其他平台發送失敗）'}")
+        await channel.send("推送完成，可用 `/ask <問題>` 針對論文發問。")
 
     async def build_report(topic):
         """背景搜尋主題相關論文、寫入向量庫，並產生研究報告。"""
@@ -185,7 +185,7 @@ def build_bot():
 
     @bot.tree.command(name="daily", description="立即抓取並推送今日 AI 論文")
     async def daily_cmd(interaction: discord.Interaction):
-        await interaction.response.send_message("⏳ 開始抓取今日論文…", ephemeral=True)
+        await interaction.response.send_message("開始抓取今日論文…", ephemeral=True)
         await push_daily(interaction.channel)
 
     @bot.tree.command(name="ask", description="依據已收錄論文回答你的問題")
@@ -202,7 +202,7 @@ def build_bot():
         else:
             papers = await asyncio.to_thread(_advanced_search, question, 4)
             body = await asyncio.to_thread(llm.answer, question, papers)
-            # 附上可稽核的來源清單（A5），並存入語意快取
+            # 附上可稽核的來源清單，並存入語意快取
             sources = format_citations(papers)
             answer = f"{body}\n\n{sources}" if sources else body
             answer_cache.put(question, answer)
@@ -225,7 +225,7 @@ def build_bot():
         await interaction.response.defer(thinking=True)
         report, papers = await build_report(topic)
         await interaction.followup.send(
-            f"📑 **主題研究報告：{topic}**（取自 arXiv {len(papers)} 篇相關論文）"
+            f" **主題研究報告：{topic}**（取自 arXiv {len(papers)} 篇相關論文）"
         )
         for chunk in _split(report):
             await interaction.channel.send(chunk)
@@ -246,7 +246,7 @@ def build_bot():
         researcher = DeepResearcher(llm, _deep_retrieve, QueryTransformer(llm))
         report, papers = await asyncio.to_thread(researcher.run, topic)
         await interaction.followup.send(
-            f"🔬 **深度研究：{topic}**（跨 {len(papers)} 篇論文）"
+            f" **深度研究：{topic}**（跨 {len(papers)} 篇論文）"
         )
         for chunk in _split(report):
             await interaction.channel.send(chunk)
@@ -265,7 +265,7 @@ def build_bot():
             return literature_review(topic, papers, llm), papers
 
         review, papers = await asyncio.to_thread(_work)
-        await interaction.followup.send(f"📝 **文獻綜述：{topic}**（{len(papers)} 篇）")
+        await interaction.followup.send(f"**文獻綜述：{topic}**（{len(papers)} 篇）")
         for chunk in _split(review):
             await interaction.channel.send(chunk)
 
@@ -305,7 +305,7 @@ def build_bot():
         if paper is None:
             await interaction.followup.send("找不到相關論文。")
             return
-        await interaction.followup.send(f"📖 **深讀：{paper.get('title', '')}**")
+        await interaction.followup.send(f"**深讀：{paper.get('title', '')}**")
         for chunk in _split(explanation):
             await interaction.channel.send(chunk)
 
@@ -320,7 +320,7 @@ def build_bot():
         _save_schedule(hour, minute)
         daily_task.change_interval(time=_push_time())
         await interaction.response.send_message(
-            f"✅ 已設定每日自動推送時間為 **{hour:02d}:{minute:02d}**（UTC+{config.PUSH_TZ_OFFSET}）。"
+            f" 已設定每日自動推送時間為 **{hour:02d}:{minute:02d}**（UTC+{config.PUSH_TZ_OFFSET}）。"
         )
 
     @bot.tree.command(name="compare", description="輸入主題，跨多篇論文產生方法比較表")
@@ -332,7 +332,7 @@ def build_bot():
             _persist(papers, source_name="arxiv")
             return llm.compare_papers(papers), papers
         result, papers = await asyncio.to_thread(_work)
-        await interaction.followup.send(f"🆚 **多文件比較：{topic}**（{len(papers)} 篇）")
+        await interaction.followup.send(f"**多文件比較：{topic}**（{len(papers)} 篇）")
         for chunk in _split(result):
             await interaction.channel.send(chunk)
 
@@ -343,7 +343,7 @@ def build_bot():
         if not rising:
             await interaction.followup.send("目前資料不足以分析趨勢，請先用 `/daily` 或 `/report` 收錄更多論文。")
             return
-        lines = ["📈 **上升中的關鍵字**（依成長斜率）"]
+        lines = [" **上升中的關鍵字**（依成長斜率）"]
         lines += [f"{i}. `{kw}`（斜率 {slope:.2f}）" for i, (kw, slope) in enumerate(rising, 1)]
         await interaction.followup.send("\n".join(lines))
 
@@ -353,7 +353,7 @@ def build_bot():
         await interaction.response.defer(thinking=True)
         papers = store.search(topic, k=5)
         draft = await asyncio.to_thread(llm.latex_draft, topic, papers)
-        await interaction.followup.send(f"📝 **LaTeX 草稿：{topic}**")
+        await interaction.followup.send(f"**LaTeX 草稿：{topic}**")
         for chunk in _split(f"```latex\n{draft}\n```"):
             await interaction.channel.send(chunk)
 
@@ -363,7 +363,7 @@ def build_bot():
         await interaction.response.defer(thinking=True)
         papers = store.search(topic, k=5)
         outline = await asyncio.to_thread(llm.slides_outline, topic, papers)
-        await interaction.followup.send(f"🎞️ **簡報大綱：{topic}**")
+        await interaction.followup.send(f"**簡報大綱：{topic}**")
         for chunk in _split(outline):
             await interaction.channel.send(chunk)
 
@@ -391,7 +391,7 @@ def build_bot():
         if not items:
             await interaction.followup.send("目前沒有抓到內容（可能是網路或 API 限制）。")
             return
-        await interaction.followup.send(f"🌐 **HN / GitHub 熱門 AI 內容**（{len(items)} 則）")
+        await interaction.followup.send(f"**HN / GitHub 熱門 AI 內容**（{len(items)} 則）")
         for it in items:
             await interaction.channel.send(f"**[{it['source']}]** {it['title']}\n{it['link']}")
 
@@ -400,7 +400,7 @@ def build_bot():
     async def like_cmd(interaction: discord.Interaction, paper_id: str):
         db.log_interaction("like", paper_id=paper_id.strip(), user_id=interaction.user.id, value=3.0)
         await interaction.response.send_message(
-            f"👍 已記錄你對 `{paper_id}` 的喜好，之後推薦會更貼近你的興趣。", ephemeral=True
+            f" 已記錄你對 `{paper_id}` 的喜好，之後推薦會更貼近你的興趣。", ephemeral=True
         )
 
     @bot.tree.command(name="agent", description="用自然語言請助理查論文、看趨勢或管理待辦（工具呼叫）")

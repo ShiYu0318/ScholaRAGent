@@ -1,4 +1,4 @@
-"""閱讀看板（v2/D7），JSON 持久化。"""
+"""閱讀看板，JSON 持久化。"""
 import pytest
 
 from src.recommend.reading_list import ReadingList

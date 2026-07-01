@@ -1,4 +1,4 @@
-"""BGE cross-encoder 重排序（v2/A3）：注入 stub scorer，離線。"""
+"""BGE cross-encoder 重排序：注入 stub scorer，離線。"""
 from src.rag.retrievers.reranker import CrossEncoderReranker
 
 

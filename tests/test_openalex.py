@@ -1,4 +1,4 @@
-"""OpenAlex 引用資料 client（v2/C1），注入式 fetch，離線。"""
+"""OpenAlex 引用資料 client，注入式 fetch，離線。"""
 from src.crawlers.openalex import OpenAlexClient
 
 

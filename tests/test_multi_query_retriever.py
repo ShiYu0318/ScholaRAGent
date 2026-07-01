@@ -53,7 +53,7 @@ def test_multi_query_fuses_across_variants():
 
 
 def test_search_returns_plain_papers():
-    qt = QueryTransformer(StubLLM(""))  # 無改寫 → 只有原查詢
+    qt = QueryTransformer(StubLLM(""))  # 無改寫 -> 只有原查詢
     base = StubRetriever({"q": ["x", "y"]})
     mqr = MultiQueryRetriever(qt, base.retrieve)
     assert mqr.search("q", k=2) == [_paper("x"), _paper("y")]

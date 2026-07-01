@@ -1,4 +1,4 @@
-"""概念知識圖抽取（v2/C2），離線 stub LLM + networkx。"""
+"""概念知識圖抽取，離線 stub LLM + networkx。"""
 from src.graph.concept_graph import extract_triples, build_concept_graph
 
 

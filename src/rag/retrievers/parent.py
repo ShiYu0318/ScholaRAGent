@@ -1,4 +1,4 @@
-"""父文件回溯檢索（Advanced RAG / A4）：small-to-big。
+"""父文件回溯檢索：small-to-big。
 
 把每篇文件切成小片段（句子級）分別嵌入檢索——小片段語意更聚焦、召回更準；
 命中後回傳其「父文件」（整篇論文），確保生成端拿到足夠上下文。
@@ -32,7 +32,7 @@ class ParentDocumentRetriever:
                 self._chunks.append(ch)
                 self._parents.append(p)
         self._vecs = self.embedder.encode(self._chunks) if self._chunks else None
-        self.logger.info(f"父文件檢索：{len(papers)} 篇 → {len(self._chunks)} 子片段")
+        self.logger.info(f"父文件檢索：{len(papers)} 篇 -> {len(self._chunks)} 子片段")
         return self
 
     def retrieve(self, query, k=4):

@@ -1,4 +1,4 @@
-"""Corrective RAG（Agentic RAG / B3）。
+"""Corrective RAG。
 
 當本地檢索的最高信心分數過低（可能收錄不足），就觸發外部搜尋（實務上接
 ArxivCrawler.search_topic）抓新論文補證據，再與本地結果融合。避免「庫裡沒有

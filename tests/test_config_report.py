@@ -1,4 +1,4 @@
-"""設定韌性檢查（v2/E4）。"""
+"""設定韌性檢查。"""
 from types import SimpleNamespace
 
 from src.config_report import config_report

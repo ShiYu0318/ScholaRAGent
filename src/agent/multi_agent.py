@@ -1,6 +1,6 @@
-"""多 agent 協作管線（Agentic RAG / B5）。
+"""多 agent 協作管線。
 
-Planner → Retriever → Writer → Critic 分工：Critic 把關事實與涵蓋度，不合格
+Planner -> Retriever -> Writer -> Critic 分工：Critic 把關事實與涵蓋度，不合格
 就帶著意見回到 Writer 修訂（上限 max_revisions）。角色以可呼叫物件注入，
 編排邏輯本身即可離線測試；實務上各角色接 LLM / 檢索器。
 """

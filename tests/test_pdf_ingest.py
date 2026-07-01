@@ -1,4 +1,4 @@
-"""PDF 全文攝取（v2/D1），離線用 PyMuPDF 自建 PDF。"""
+"""PDF 全文攝取，離線用 PyMuPDF 自建 PDF。"""
 import fitz  # PyMuPDF
 
 from src.rag.pdf_ingest import extract_text, split_sections, fetch_and_ingest

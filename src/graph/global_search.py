@@ -1,8 +1,8 @@
-"""全域搜尋（GraphRAG / C11，受 meetGRAG / GraphRAG 啟發）。
+"""全域搜尋。
 
-回答宏觀、跨文件的問題時，不做單點檢索，而是對每個研究社群摘要（[C3]
+回答宏觀、跨文件的問題時，不做單點檢索，而是對每個研究社群摘要（
 summarize_communities）先各自產生部分答案（map），再彙整成最終答案（reduce）。
-與 [C10] router 搭配：global 問題走這裡，local 問題走向量+圖檢索。
+與  router 搭配：global 問題走這裡，local 問題走向量+圖檢索。
 """
 from src.utils.logger import get_logger
 

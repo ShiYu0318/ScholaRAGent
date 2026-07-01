@@ -14,7 +14,7 @@ class BaseCrawler:
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
-            
+
             try:
                 self.logger.info(f"正在存取: {url}")
                 await page.goto(url, timeout=60000)

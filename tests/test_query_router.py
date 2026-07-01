@@ -1,4 +1,4 @@
-"""查詢路由 local/global（v2/C10，meetGRAG 啟發），離線。"""
+"""查詢路由 local/global，離線。"""
 from src.graph.router import route_query
 
 
@@ -33,7 +33,7 @@ def test_heuristic_defaults_to_local():
 
 
 def test_llm_invalid_output_falls_back_to_heuristic():
-    # LLM 回無效值 → 用啟發式（此題含 landscape → global）
+    # LLM 回無效值 -> 用啟發式（此題含 landscape -> global）
     assert route_query("landscape of the field", llm=StubLLM("banana")) == "global"
 
 

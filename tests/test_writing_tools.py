@@ -1,4 +1,4 @@
-"""寫作助理強化（v2/D10），離線 stub。"""
+"""寫作助理強化，離線 stub。"""
 from src.tools.writing_tools import polish_text, extract_contributions, review_checklist
 
 

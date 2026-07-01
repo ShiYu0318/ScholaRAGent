@@ -1,4 +1,4 @@
-"""語意快取 + 引用標註（v2/A5），離線。"""
+"""語意快取 + 引用標註，離線。"""
 from src.rag.semantic_cache import SemanticCache
 from src.rag.citations import format_citations
 
@@ -12,7 +12,7 @@ def test_cache_returns_value_for_identical_query(fake_embedder):
 def test_cache_hit_on_highly_similar_query(fake_embedder):
     c = SemanticCache(embedder=fake_embedder, threshold=0.5)
     c.put("graph neural networks for molecules", "GNN")
-    # 高詞彙重疊 → 命中
+    # 高詞彙重疊 -> 命中
     assert c.get("graph neural networks molecules") == "GNN"
 
 

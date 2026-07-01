@@ -1,6 +1,6 @@
-"""片段級引用 [REF:chunk_id]（Advanced RAG / A8，受 meetGRAG 啟發）。
+"""片段級引用 [REF:chunk_id]。
 
-把 A5 的論文層引用升級到**片段層**：檢索脈絡中每個 chunk 標上 `[REF:id]`，
+把 的論文層引用升級到**片段層**：檢索脈絡中每個 chunk 標上 `[REF:id]`，
 請 LLM 於句末引用對應 id；事後解析答案裡的 `[REF:id]`，對應回精確來源
 （論文、章節、連結），做到可點回原文的細粒度追溯。
 """
@@ -36,7 +36,7 @@ def render_sources(answer, chunks):
     used = resolve_refs(answer, chunks)
     if not used:
         return ""
-    lines = ["📚 **來源**"]
+    lines = [" **來源**"]
     for c in used:
         title = c.get("paper_title", "")
         section = c.get("section", "")

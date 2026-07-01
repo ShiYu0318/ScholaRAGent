@@ -21,7 +21,7 @@ def test_bm25_no_match_returns_empty():
 
 
 def test_rrf_fuses_rankings():
-    # id "b" 在兩份清單都靠前 → 融合後應第一
+    # id "b" 在兩份清單都靠前 -> 融合後應第一
     fused = reciprocal_rank_fusion([["a", "b", "c"], ["b", "c", "a"]])
     assert fused[0][0] == "b"
 

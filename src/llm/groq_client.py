@@ -86,7 +86,7 @@ class GroqClient:
             return f"產生報告時發生錯誤：{e}"
 
     def compare_papers(self, papers):
-        """跨多篇論文做方法比較，產出 Markdown 比較表 + 分析（Week8）。"""
+        """跨多篇論文做方法比較，產出 Markdown 比較表 + 分析。"""
         if len(papers) < 2:
             return "多文件比較至少需要 2 篇論文，請先用 `/report` 或 `/daily` 收錄更多論文。"
 
@@ -111,7 +111,7 @@ class GroqClient:
             self.logger.error(f"比較分析失敗: {e}")
             return f"產生比較分析時發生錯誤：{e}"
 
-    # ---- 研究助理（Week11）----
+    # ---- 研究助理----
     def latex_draft(self, topic, papers=None):
         """產生一份可編譯的 LaTeX 論文草稿骨架（含相關工作段落）。"""
         refs = ""

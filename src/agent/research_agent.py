@@ -1,6 +1,6 @@
-"""檢索式 ReAct agent（Agentic RAG / B1）。
+"""檢索式 ReAct agent。
 
-不再「一次檢索、一次作答」，而是多輪：先檢索→看已找到什麼→由 LLM 決定
+不再「一次檢索、一次作答」，而是多輪：先檢索->看已找到什麼->由 LLM 決定
 是否需要換角度再查（丟出下一個查詢或 DONE）。適合需要多跳、多面向的複雜問題。
 
 `retrieve` 為 `retrieve(query, k) -> [(paper, score)]` 的可呼叫物件（如混合檢索）。

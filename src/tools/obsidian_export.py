@@ -1,4 +1,4 @@
-"""Obsidian 知識庫匯出（Tools / C9，受 paper_master 啟發）。
+"""Obsidian 知識庫匯出。
 
 把論文與其關聯匯成一組 Obsidian Markdown 筆記：YAML frontmatter（供 Dataview
 查詢）＋ `[[wikilinks]]`（供 Juggl 圖譜）。研究者可直接把這些 .md 丟進 vault，

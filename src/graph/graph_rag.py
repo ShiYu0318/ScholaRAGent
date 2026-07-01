@@ -1,8 +1,8 @@
-"""GraphRAG 社群偵測與圖檢索（C3 / C4），建立在 [concept_graph] 之上。
+"""GraphRAG 社群偵測與圖檢索，建立在 [concept_graph] 之上。
 
-- C3 detect_communities/summarize_communities：把概念圖分成研究子領域社群，
+- detect_communities/summarize_communities：把概念圖分成研究子領域社群，
   各生成一段摘要，支援「這個領域整體在做什麼」的全局問題。
-- C4 neighborhood/graph_context：從種子概念沿邊擴展，取出相關關係作為 LLM
+- neighborhood/graph_context：從種子概念沿邊擴展，取出相關關係作為 LLM
   的圖檢索脈絡，支援路徑式推理（「A 的方法被誰改進？」）。
 
 純 networkx，離線可測；上雲時可換 Neo4j 但介面不變。
@@ -46,7 +46,7 @@ def summarize_communities(graph, llm):
 
 
 def influential_papers(graph, top_n=10):
-    """用 PageRank 找引用圖中最具影響力的節點（C7）。
+    """用 PageRank 找引用圖中最具影響力的節點。
 
     引用邊指向被引論文，故被大量引用者 PageRank 高。回傳 [(node, score)] 降序。
     """

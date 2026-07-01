@@ -1,8 +1,8 @@
-"""Self-RAG 充分性反思（Agentic RAG / B2）。
+"""Self-RAG 充分性反思。
 
 生成答案前，先讓 LLM 檢視「目前檢索到的脈絡是否足以回答問題」。
 不足時要求它給出一個更好的檢索查詢，交回檢索迴圈再補證據（上限 N 輪）。
-與 [B1 ResearchAgent] 組合即成 Self-RAG：檢索→反思→（必要時）再檢索→作答。
+與  組合即成 Self-RAG：檢索->反思->（必要時）再檢索->作答。
 """
 from src.utils.logger import get_logger
 

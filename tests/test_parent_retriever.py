@@ -1,4 +1,4 @@
-"""父文件回溯檢索（v2/A4）：small-to-big，離線 FakeEmbedder。"""
+"""父文件回溯檢索：small-to-big，離線 FakeEmbedder。"""
 from src.rag.retrievers.parent import ParentDocumentRetriever
 
 

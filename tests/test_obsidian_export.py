@@ -1,4 +1,4 @@
-"""Obsidian 知識庫匯出（v2/C9，paper_master 啟發）。"""
+"""Obsidian 知識庫匯出。"""
 from src.tools.obsidian_export import to_obsidian
 
 

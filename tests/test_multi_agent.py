@@ -1,4 +1,4 @@
-"""多 agent 協作管線（v2/B5），純編排、離線。"""
+"""多 agent 協作管線，純編排、離線。"""
 from src.agent.multi_agent import MultiAgentPipeline
 
 

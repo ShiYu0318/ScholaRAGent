@@ -1,7 +1,7 @@
-"""查詢路由 local / global（GraphRAG / C10，受 meetGRAG 啟發）。
+"""查詢路由 local / global。
 
-- local：針對特定實體／論文的問題 → 向量檢索 + 圖鄰域擴展（[graph_rag].graph_context）。
-- global：宏觀、跨文件的問題（「這領域整體在做什麼」）→ 社群報告推理（[C11] global_search）。
+- local：針對特定實體／論文的問題 -> 向量檢索 + 圖鄰域擴展（[graph_rag].graph_context）。
+- global：宏觀、跨文件的問題（「這領域整體在做什麼」）-> 社群報告推理（ global_search）。
 
 有 LLM 就用 LLM 分類；無 LLM 或失敗／回覆無效則退回關鍵字啟發式。
 """

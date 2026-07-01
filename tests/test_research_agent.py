@@ -1,4 +1,4 @@
-"""檢索式 ReAct agent（v2/B1）：多輪檢索，離線 stub。"""
+"""檢索式 ReAct agent：多輪檢索，離線 stub。"""
 from src.agent.research_agent import ResearchAgent
 
 

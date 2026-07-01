@@ -7,7 +7,7 @@ from src.analysis import trends
 
 def test_short_series_falls_back():
     f = LSTMForecaster(window=4)
-    # 少於 window+2 個點 → 回退移動平均，不訓練
+    # 少於 window+2 個點 -> 回退移動平均，不訓練
     out = f.forecast_next([1, 2, 3])
     assert f.net is None
     assert out >= 0.0

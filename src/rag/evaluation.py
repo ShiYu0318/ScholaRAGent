@@ -1,4 +1,4 @@
-"""RAG 離線評估指標（Advanced RAG / A6，RAGAS 精神的輕量版）。
+"""RAG 離線評估指標。
 
 不需外部服務即可回歸驗證檢索與生成品質：
 - 檢索面：precision@k、recall、reciprocal rank（MRR 的單筆分量）。
@@ -52,7 +52,7 @@ def faithfulness(answer, contexts):
 
 
 def citation_accuracy(answer, chunks):
-    """片段級引用準確度（A8 [REF:id] 用），meetGRAG 精神。
+    """片段級引用準確度。
 
     - valid_ratio：答案中的 [REF:id] 有多少比例對應到真實 chunk（來源/語法正確）。
     - grounded_ratio：有效引用中，被引 chunk 內容與答案有詞彙重疊的比例（有據）。

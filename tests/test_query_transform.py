@@ -1,4 +1,4 @@
-"""查詢轉換：HyDE / multi-query / decompose（stub LLM，離線）。"""
+"""查詢轉換：HyDE / multi-query / decompose。"""
 from src.rag.query_transform import QueryTransformer, _parse_lines
 
 

@@ -1,4 +1,4 @@
-"""可重現性訊號（v2/D5）：從論文 metadata 抽 code 連結，離線純函式。"""
+"""可重現性訊號：從論文 metadata 抽 code 連結，離線純函式。"""
 from src.recommend.reproducibility import extract_code_links, reproducibility_signal
 
 

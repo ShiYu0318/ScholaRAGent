@@ -1,4 +1,4 @@
-"""訂閱式主題快報（v2/D8），JSON 持久化。"""
+"""訂閱式主題快報，JSON 持久化。"""
 from src.recommend.subscriptions import Subscriptions
 
 

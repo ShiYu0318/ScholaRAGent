@@ -1,11 +1,11 @@
-"""引用網路建構（GraphRAG / C6，受 paper_master 啟發）。
+"""引用網路建構。
 
 從一篇種子論文展開它的**引用脈絡**：
 - prior works（先前研究）：種子的參考文獻，edge = 種子 --cites--> 先前研究。
 - derivative works（後續研究）：引用種子的論文，edge = 後續研究 --cites--> 種子。
 
 回傳 networkx DiGraph，可直接餵給 [graph_rag] 的鄰域檢索、[graph.visualize]
-的 Mermaid 匯出、C7 PageRank。用 [OpenAlex] client（需 work_by_arxiv/cited_by），
+的 Mermaid 匯出、PageRank。用 [OpenAlex] client（需 work_by_arxiv/cited_by），
 離線用 stub 測、真 API 可驗證。
 """
 import networkx as nx

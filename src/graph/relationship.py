@@ -1,4 +1,4 @@
-"""論文關係分析（GraphRAG / C8，受 paper_master 啟發）。
+"""論文關係分析。
 
 用 LLM 判斷兩篇論文的關係（延伸/比較/反駁/應用…）並給一句說明，
 可標在引用圖的邊上，讓使用者一眼看懂「這兩篇怎麼關聯」。離線 stub 可測。
@@ -19,7 +19,7 @@ _SYSTEM = (
 
 
 def analyze_relationship(paper_a, paper_b, llm):
-    """回傳 {relation, explanation}。無法解析→related；LLM 出錯→unknown。"""
+    """回傳 {relation, explanation}。無法解析->related；LLM 出錯->unknown。"""
     user = (f"A 標題：{paper_a.get('title', '')}\nA 摘要：{paper_a.get('abstract', '')}\n\n"
             f"B 標題：{paper_b.get('title', '')}\nB 摘要：{paper_b.get('abstract', '')}")
     try:

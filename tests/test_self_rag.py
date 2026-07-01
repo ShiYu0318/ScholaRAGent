@@ -1,4 +1,4 @@
-"""Self-RAG 充分性反思（v2/B2），離線 stub。"""
+"""Self-RAG 充分性反思，離線 stub。"""
 from src.agent.self_rag import assess_sufficiency
 
 

@@ -1,4 +1,4 @@
-"""查詢轉換（Advanced RAG / A2）：提升召回與精準度的前處理。
+"""查詢轉換：提升召回與精準度的前處理。
 
 - HyDE：先讓 LLM 生成一段「假設性答案/論文片段」，用它去嵌入檢索，
   比原始問題更貼近文件語意空間。
@@ -11,7 +11,7 @@ import re
 
 from src.utils.logger import get_logger
 
-_NUM_PREFIX = re.compile(r"^\s*(?:\d+[.)、]|[-*•])\s*")
+_NUM_PREFIX = re.compile(r"^\s*(?:\d+[.)、]|[-*])\s*")
 
 
 def _parse_lines(text, limit=None):

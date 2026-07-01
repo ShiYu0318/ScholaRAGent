@@ -1,4 +1,4 @@
-"""答案引用標註（Advanced RAG / A5）。
+"""答案引用標註。
 
 把檢索到的論文整理成可稽核的編號來源清單，供 LLM 以 [n] 標註出處、
 使用者點回原文，降低幻覺、提升可信度。
@@ -12,7 +12,7 @@ def format_citations(papers):
     """
     if not papers:
         return ""
-    lines = ["📚 **來源**"]
+    lines = [" **來源**"]
     for i, p in enumerate(papers, 1):
         title = p.get("title", "(無標題)")
         link = p.get("link", "")

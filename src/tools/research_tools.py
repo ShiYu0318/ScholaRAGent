@@ -1,9 +1,9 @@
 """研究工作流工具：直擊研究生／研究員痛點。
 
-- D3 to_bibtex：一鍵匯出 BibTeX（引用管理煩）。
-- D2 literature_review：文獻綜述草稿 + 研究缺口（related work 難寫）。
-- D4 comparison_table：方法×資料集×指標比較表（追 SOTA 累）。
-- D6 explain_paper：逐節深讀導覽、名詞白話化（讀不懂密集論文）。
+- to_bibtex：一鍵匯出 BibTeX（引用管理煩）。
+- literature_review：文獻綜述草稿 + 研究缺口（related work 難寫）。
+- comparison_table：方法×資料集×指標比較表（追 SOTA 累）。
+- explain_paper：逐節深讀導覽、名詞白話化（讀不懂密集論文）。
 
 BibTeX 為純函式（好測）；其餘為 LLM 編排，注入 stub 即可離線測試。
 """

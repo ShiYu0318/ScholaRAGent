@@ -1,4 +1,4 @@
-"""寫作助理強化（Tools / D10）：升級 /latex 之外的論文寫作輔助。
+"""寫作助理強化：升級 /latex 之外的論文寫作輔助。
 
 - polish_text：文法／清晰度改寫（GEC）。
 - extract_contributions：從草稿提煉貢獻點。

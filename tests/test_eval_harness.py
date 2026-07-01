@@ -1,4 +1,4 @@
-"""檢索評估 harness（v2/E1）。"""
+"""檢索評估 harness。"""
 from src.rag.eval_harness import evaluate_retrieval
 
 
@@ -13,7 +13,7 @@ def test_aggregates_metrics_across_dataset():
     dataset = [{"query": "q1", "relevant": ["a"]},
                {"query": "q2", "relevant": ["c"]}]
     res = evaluate_retrieval(retrieve, dataset, k=2)
-    # q1: 命中在第1名 → RR 1.0；q2: c 在第2名 → RR 0.5
+    # q1: 命中在第1名 -> RR 1.0；q2: c 在第2名 -> RR 0.5
     assert res["mrr"] == 0.75
     assert res["recall"] == 1.0
     assert res["precision@k"] == 0.5      # 每題 2 取 1 相關

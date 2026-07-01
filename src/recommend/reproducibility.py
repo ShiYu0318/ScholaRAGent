@@ -1,4 +1,4 @@
-"""可重現性追蹤（Recommend / D5）。
+"""可重現性追蹤。
 
 Papers-with-Code 已關站，改用最可靠的訊號：許多論文會在摘要／comment 寫出
 程式碼倉庫連結（github/gitlab）。抽取這些連結，標記「有無官方實作」，

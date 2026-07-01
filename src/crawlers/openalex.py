@@ -1,7 +1,7 @@
-"""OpenAlex 引用資料 client（GraphRAG / C1）。
+"""OpenAlex 引用資料 client。
 
 OpenAlex 是免費、免金鑰的學術圖譜。以 arXiv 論文的 DOI（10.48550/arXiv.<id>）
-查詢，取得被引數與參考文獻，供引用圖（C1）、可信度訊號（D9）使用。
+查詢，取得被引數與參考文獻，供引用圖、可信度訊號使用。
 
 `fetch(url) -> dict` 可注入，離線用 stub 測試；預設用 requests 實打 API。
 禮貌起見可帶 mailto 進入 OpenAlex 的 polite pool。
@@ -61,7 +61,7 @@ class OpenAlexClient:
             data = self._fetch(self._url(f"works/doi:10.48550/arXiv.{clean}"))
             work = self._normalize(data)
         except Exception as e:
-            # 舊論文常無 arXiv DOI（2022 前），或被限流 → 退回標題搜尋
+            # 舊論文常無 arXiv DOI（2022 前），或被限流 -> 退回標題搜尋
             self.logger.info(f"OpenAlex DOI 查詢未果（{clean}）：{e}")
             work = None
         if work is None and title:

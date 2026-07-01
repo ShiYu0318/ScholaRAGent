@@ -1,4 +1,4 @@
-"""全域搜尋 map-reduce（v2/C11，meetGRAG 啟發），離線 stub。"""
+"""全域搜尋 map-reduce，離線 stub。"""
 from src.graph.global_search import global_search
 
 

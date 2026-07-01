@@ -1,4 +1,4 @@
-"""嵌入快取（v2/E3），離線。"""
+"""嵌入快取，離線。"""
 import numpy as np
 
 from src.rag.caching_embedder import CachingEmbedder

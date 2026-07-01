@@ -1,4 +1,4 @@
-"""片段級 [REF:chunk_id] 引用（v2/A8，meetGRAG 啟發）。"""
+"""片段級 [REF:chunk_id] 引用。"""
 from src.rag.chunk_citations import (
     format_context, extract_refs, resolve_refs, render_sources,
 )

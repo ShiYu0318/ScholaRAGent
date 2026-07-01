@@ -1,4 +1,4 @@
-"""工具呼叫 agent（Week12）：驅動 LLM 進行 function calling 的多步迴圈。
+"""工具呼叫 agent：驅動 LLM 進行 function calling 的多步迴圈。
 
 client 需為 OpenAI 相容用戶端（Groq 亦相容），具
 `client.chat.completions.create(model, messages, tools, tool_choice)`。

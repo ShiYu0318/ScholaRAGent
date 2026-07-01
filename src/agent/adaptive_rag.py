@@ -1,11 +1,11 @@
-"""Adaptive-RAG（Agentic RAG / B6）。
+"""Adaptive-RAG。
 
 依問題複雜度自適應選擇檢索策略（Jeong et al. 2024 的精神）：
 - none：不需檢索（打招呼、常識），直接作答省成本。
 - simple：單次檢索即可。
-- complex：需多跳/多面向 → 走 [B1 ResearchAgent] 之類的迭代檢索。
+- complex：需多跳/多面向 -> 走  之類的迭代檢索。
 
-有 LLM 就用 LLM 分類；否則以啟發式判斷。與 [C10 router] 互補（那個分 local/global，
+有 LLM 就用 LLM 分類；否則以啟發式判斷。與  互補（那個分 local/global，
 這個分檢索深度）。
 """
 import re
@@ -55,7 +55,7 @@ def classify_complexity(query, llm=None):
 
 
 def adaptive_retrieve(query, simple_retrieve, multi_retrieve, llm=None):
-    """依複雜度分派：none→[]、simple→單次、complex→多步檢索。回傳論文清單。"""
+    """依複雜度分派：none->[]、simple->單次、complex->多步檢索。回傳論文清單。"""
     level = classify_complexity(query, llm=llm)
     if level == "none":
         return []

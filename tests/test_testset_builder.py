@@ -1,4 +1,4 @@
-"""Eval testset builder（v2/E8，meetGRAG 啟發），離線 stub。"""
+"""Eval testset builder，離線 stub。"""
 from src.rag.testset_builder import build_testset, validate_testset
 
 

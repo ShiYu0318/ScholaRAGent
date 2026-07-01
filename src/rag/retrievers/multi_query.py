@@ -1,4 +1,4 @@
-"""多查詢檢索（Advanced RAG / A2 收尾）：把查詢轉換接進實際檢索。
+"""多查詢檢索：把查詢轉換接進實際檢索。
 
 流程：先用 QueryTransformer 把問題改寫成多個版本（含原查詢），
 每個版本各自檢索，最後用 Reciprocal Rank Fusion 融合成單一排序。
@@ -34,7 +34,7 @@ class MultiQueryRetriever:
             ranked_id_lists.append(ids)
 
         fused = reciprocal_rank_fusion(ranked_id_lists, k=self.rrf_k)
-        self.logger.info(f"多查詢檢索：{len(variants)} 版本 → 融合 {len(fused)} 篇候選")
+        self.logger.info(f"多查詢檢索：{len(variants)} 版本 -> 融合 {len(fused)} 篇候選")
         return [(by_id[pid], score) for pid, score in fused[:k] if pid in by_id]
 
     def search(self, query, k=4, n_variants=3):

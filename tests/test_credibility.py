@@ -1,4 +1,4 @@
-"""可信度／影響力訊號（v2/D9），離線 stub client。"""
+"""可信度／影響力訊號，離線 stub client。"""
 from src.recommend.credibility import credibility_signal, annotate_credibility, format_signal
 
 

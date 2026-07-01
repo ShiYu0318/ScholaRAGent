@@ -1,4 +1,4 @@
-"""Contextual chunk embedding（Advanced RAG / A7）。
+"""Contextual chunk embedding。
 
 參考 Anthropic「Contextual Retrieval」：嵌入前，先讓 LLM 針對整篇文件替每個
 片段補一句「定位說明」（本片段在全文的角色），再與原片段一起嵌入。

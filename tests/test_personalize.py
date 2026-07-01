@@ -1,4 +1,4 @@
-"""每日個人化過濾（v2/D11），離線 FakeEmbedder。"""
+"""每日個人化過濾，離線 FakeEmbedder。"""
 from src.recommend.personalize import personalize_daily
 
 

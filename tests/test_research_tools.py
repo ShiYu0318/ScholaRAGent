@@ -1,4 +1,4 @@
-"""研究工作流工具（v2/D2,D3,D4,D6），離線 stub。"""
+"""研究工作流工具，離線 stub。"""
 from src.tools.research_tools import (
     to_bibtex, literature_review, comparison_table, explain_paper,
 )
@@ -22,7 +22,7 @@ class StubLLM:
         return self.reply
 
 
-# --- D3 BibTeX（純函式） ---
+# --- BibTeX（純函式） ---
 
 def test_to_bibtex_contains_core_fields():
     bib = to_bibtex([_paper()])
@@ -46,7 +46,7 @@ def test_to_bibtex_empty():
     assert to_bibtex([]) == ""
 
 
-# --- D2 / D4 / D6（LLM orchestration） ---
+# ------
 
 def test_literature_review_calls_llm_with_papers():
     llm = StubLLM("REVIEW")
