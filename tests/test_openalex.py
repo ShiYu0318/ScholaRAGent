@@ -44,6 +44,21 @@ def test_returns_none_on_fetch_error():
     assert client.citation_count("2310.06825") == 0
 
 
+def test_cited_by_returns_normalized_citing_works():
+    reply = {"results": [
+        {"id": "https://openalex.org/W10", "title": "Citing A", "cited_by_count": 3,
+         "referenced_works": [], "publication_year": 2024},
+        {"id": "https://openalex.org/W11", "title": "Citing B", "cited_by_count": 1,
+         "referenced_works": [], "publication_year": 2025},
+    ]}
+    ff = FakeFetch(reply)
+    client = OpenAlexClient(fetch=ff)
+    out = client.cited_by("W1", limit=5)
+    assert "filter=cites:W1" in ff.urls[0]
+    assert [w["openalex_id"] for w in out] == ["W10", "W11"]
+    assert out[0]["title"] == "Citing A"
+
+
 class RoutingFetch:
     """DOI 查詢失敗、標題搜尋成功——模擬舊論文（無 arXiv DOI）。"""
     def __init__(self, search_work):

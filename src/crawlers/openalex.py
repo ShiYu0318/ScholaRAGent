@@ -79,6 +79,17 @@ class OpenAlexClient:
             self.logger.info(f"OpenAlex 標題搜尋未果（{title[:40]}）：{e}")
             return None
 
+    def cited_by(self, openalex_id, limit=25):
+        """回傳引用此 work 的論文（derivative works），正規化清單。失敗回空。"""
+        per = min(max(limit, 1), 200)
+        try:
+            data = self._fetch(self._url(f"works?filter=cites:{openalex_id}&per-page={per}"))
+        except Exception as e:
+            self.logger.info(f"OpenAlex cited_by 查詢未果（{openalex_id}）：{e}")
+            return []
+        works = [self._normalize(w) for w in (data or {}).get("results", [])]
+        return [w for w in works if w][:limit]
+
     def citation_count(self, arxiv_id, title=None):
         """便捷：只取被引數；查不到回 0。"""
         w = self.work_by_arxiv(arxiv_id, title=title)
