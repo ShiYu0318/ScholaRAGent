@@ -1,13 +1,15 @@
 """內建工具集：把向量庫、趨勢分析、任務排程包裝成可被 LLM 呼叫的工具。"""
 from src.analysis import trends
+from src.tools.calendar_ics import CalendarExporter
 from src.tools.registry import ToolRegistry
 from src.tools.task_manager import TaskManager
 
 
-def build_default_registry(store=None, task_manager=None):
-    """建立內建工具註冊表。store 提供論文檢索，task_manager 提供待辦排程。"""
+def build_default_registry(store=None, task_manager=None, calendar=None):
+    """建立內建工具註冊表。store 提供論文檢索，task_manager 提供待辦排程，calendar 匯出 .ics。"""
     registry = ToolRegistry()
     tasks = task_manager or TaskManager()
+    cal = calendar or CalendarExporter()
 
     def search_papers(query, k=3):
         if store is None:
@@ -55,5 +57,17 @@ def build_default_registry(store=None, task_manager=None):
         "列出目前所有未完成的待辦事項。",
         {"properties": {}, "required": []},
         lambda: tasks.list_tasks(),
+    )
+    registry.register(
+        "add_calendar_event",
+        "建立一則行事曆事件並匯出成 .ics 檔（可匯入 Google/Apple/Outlook 行事曆）。",
+        {"properties": {
+            "title": {"type": "string", "description": "事件標題"},
+            "date": {"type": "string", "description": "日期 YYYY-MM-DD"},
+            "time": {"type": "string", "description": "時間 HH:MM，省略則為整日事件"},
+            "description": {"type": "string", "description": "事件說明，可省略"},
+        }, "required": ["title", "date"]},
+        lambda title, date, time=None, description="": cal.save_event(
+            title, date, time=time, description=description),
     )
     return registry

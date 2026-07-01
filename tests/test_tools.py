@@ -68,7 +68,8 @@ def test_builtins_search_and_tasks(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "TASKS_PATH", tmp_path / "tasks.json")
     store = FakeStore([make_paper("1", "Agent Paper"), make_paper("2", "RAG Paper")])
     reg = builtins.build_default_registry(store=store)
-    assert set(reg.names()) == {"search_papers", "list_trending", "add_task", "list_tasks"}
+    assert set(reg.names()) == {"search_papers", "list_trending", "add_task",
+                                "list_tasks", "add_calendar_event"}
     assert "Agent Paper" in reg.execute("search_papers", {"query": "agent", "k": 1})
     assert "已新增待辦" in reg.execute("add_task", {"title": "demo"})
     assert "demo" in reg.execute("list_tasks", {})
