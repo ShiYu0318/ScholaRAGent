@@ -60,10 +60,15 @@ def forecast(counts, method="moving_average", window=3):
 
     - moving_average：取最後 window 期平均。
     - linear：對序列做最小平方線性擬合並外推一期。
+    - lstm：用 LSTM 滑動視窗預測（序列過短時內部自動回退移動平均）。
     """
     counts = [float(c) for c in counts]
     if not counts:
         return 0.0
+    if method == "lstm":
+        # 延遲載入，避免非 LSTM 路徑也要付 torch 匯入成本
+        from src.analysis.lstm_forecaster import LSTMForecaster
+        return LSTMForecaster(window=window).forecast_next(counts)
     if method == "linear" and len(counts) >= 2:
         x = np.arange(len(counts))
         slope, intercept = np.polyfit(x, counts, 1)
