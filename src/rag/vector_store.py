@@ -97,7 +97,16 @@ class VectorStore:
     def load(self):
         if config.INDEX_PATH.exists() and config.METADATA_PATH.exists():
             try:
-                self.index = faiss.read_index(str(config.INDEX_PATH))
+                saved = faiss.read_index(str(config.INDEX_PATH))
+                # 若 embedding 模型換過（維度不同，如 all-MiniLM 384 → bge-m3 1024），
+                # 舊 index 不相容，丟棄並以新維度重建，避免檢索崩潰。
+                if saved.d != self.embedder.dim:
+                    self.logger.warning(
+                        f"向量庫維度不符（存檔 {saved.d} != 模型 {self.embedder.dim}），"
+                        "已換 embedding 模型；捨棄舊 index，將以新模型重建。"
+                    )
+                    return
+                self.index = saved
                 with open(config.METADATA_PATH, encoding="utf-8") as f:
                     self.papers = json.load(f)
                 self._ids = {p["id"] for p in self.papers}
