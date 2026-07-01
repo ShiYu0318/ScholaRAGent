@@ -4,11 +4,13 @@
 """
 from src.bot import discord_bot
 from src import config
+from tests.conftest import FakeEmbedder
 
 
 class FakeStore:
     def __init__(self, *a, **k):
         self.papers = []
+        self.embedder = FakeEmbedder()
 
     def add(self, papers):
         self.papers.extend(papers)

@@ -26,6 +26,8 @@ from src.rag.retrievers.hybrid import HybridRetriever
 from src.rag.query_transform import QueryTransformer
 from src.rag.retrievers.multi_query import MultiQueryRetriever
 from src.rag.retrievers.reranker import CrossEncoderReranker
+from src.rag.semantic_cache import SemanticCache
+from src.rag.citations import format_citations
 from src.utils.file_manager import save_to_text
 from src.utils.logger import get_logger
 
@@ -78,6 +80,7 @@ def build_bot():
     hybrid = HybridRetriever(store)
     advanced_retriever = MultiQueryRetriever(QueryTransformer(llm), hybrid.retrieve)
     reranker = CrossEncoderReranker() if config.RERANK_ENABLED else None
+    answer_cache = SemanticCache(store.embedder, threshold=0.95)  # A5 語意快取
 
     def _advanced_search(question, k=4):
         """多查詢改寫 + 混合檢索（+ 可選 cross-encoder 精排）。每次重建 BM25 索引。"""
@@ -190,8 +193,17 @@ def build_bot():
             await interaction.response.send_message("用法：`/ask 你的問題`", ephemeral=True)
             return
         await interaction.response.defer(thinking=True)
-        papers = await asyncio.to_thread(_advanced_search, question, 4)
-        answer = await asyncio.to_thread(llm.answer, question, papers)
+        cached = answer_cache.get(question)
+        if cached is not None:
+            papers = []
+            answer = cached
+        else:
+            papers = await asyncio.to_thread(_advanced_search, question, 4)
+            body = await asyncio.to_thread(llm.answer, question, papers)
+            # 附上可稽核的來源清單（A5），並存入語意快取
+            sources = format_citations(papers)
+            answer = f"{body}\n\n{sources}" if sources else body
+            answer_cache.put(question, answer)
         # 記錄使用者互動與長期記憶（供推薦排序 / 個人化）
         uid = interaction.user.id
         memory.add(uid, question, kind="query")
