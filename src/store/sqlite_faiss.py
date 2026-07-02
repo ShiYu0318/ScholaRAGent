@@ -212,6 +212,10 @@ class SqliteFaissStore(Store):
         ).fetchone()
         return dict(row) if row else None
 
+    def all_users(self):
+        rows = self._conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
     def get_user_by_oauth(self, field, value):
         if field not in _USER_OAUTH_FIELDS:
             raise ValueError(f"未知 OAuth 欄位：{field}")

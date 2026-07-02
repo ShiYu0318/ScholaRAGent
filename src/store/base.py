@@ -34,6 +34,10 @@ class Store(ABC):
     def update_user(self, user_id, **fields):
         """更新使用者欄位，回傳更新後 user dict。"""
 
+    @abstractmethod
+    def all_users(self):
+        """列出所有使用者（排程器建立每人任務用）。"""
+
     # ---- 論文 / 互動（結構化查詢）----
     @abstractmethod
     def upsert_papers(self, papers):

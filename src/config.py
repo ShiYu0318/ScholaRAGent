@@ -87,4 +87,7 @@ DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 STORE_BACKEND = os.getenv("STORE_BACKEND", "sqlite")
 DATABASE_URL = os.getenv("DATABASE_URL", "")  # postgres 後端連線字串
 
+# 每人通知排程器（APScheduler）；測試與未部署時預設關閉
+SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "0") in ("1", "true", "True")
+
 DATA_DIR.mkdir(exist_ok=True)
