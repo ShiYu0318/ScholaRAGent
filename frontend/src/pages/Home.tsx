@@ -27,7 +27,15 @@ interface Paper {
 
 interface HealthInfo {
   status: string;
+  store_backend: string;
   store: Record<string, number | string | null>;
+}
+
+interface WeeklyDigest {
+  overview: string | null;
+  total: number;
+  papers: Paper[];
+  keywords: { keyword: string; count: number }[];
 }
 
 function useCardQuery<T>(key: string[], path: string) {
@@ -39,9 +47,9 @@ export function Home() {
   const papers = useCardQuery<{ items: Paper[]; total: number }>(
     ["papers", "recent"], "/api/papers?limit=5",
   );
-  const weekly = useCardQuery<{ summary: string }>(["digest", "weekly"], "/api/digest/weekly");
-  const trends = useCardQuery<{ items: { term: string; count: number }[] }>(
-    ["trends"], "/api/trends?limit=6",
+  const weekly = useCardQuery<WeeklyDigest>(["digest", "weekly"], "/api/digest/weekly");
+  const trends = useCardQuery<{ top: { keyword: string; count: number }[] }>(
+    ["trends"], "/api/trends",
   );
   const reading = useCardQuery<{ items: { id: string; title: string }[] }>(
     ["reading", "to-read"], "/api/reading?state=to-read",
@@ -89,11 +97,32 @@ export function Home() {
         </Card>
 
         <Card title={t("home.weeklyDigest")} icon={GraphIcon}>
-          <CardState loading={weekly.isPending} error={weekly.isError} />
-          {weekly.data && (
-            <Text sx={{ fontSize: 1, whiteSpace: "pre-wrap" }}>
-              {weekly.data.summary.slice(0, 400)}
-            </Text>
+          <CardState
+            loading={weekly.isPending}
+            error={weekly.isError}
+            empty={weekly.data?.total === 0}
+          />
+          {weekly.data && weekly.data.total > 0 && (
+            <Box display="grid" sx={{ gap: 2 }}>
+              {weekly.data.overview ? (
+                <Text sx={{ fontSize: 1, whiteSpace: "pre-wrap" }}>
+                  {weekly.data.overview.slice(0, 400)}
+                </Text>
+              ) : (
+                weekly.data.papers.slice(0, 4).map((p) => (
+                  <Text key={p.id} sx={{ fontSize: 1 }} className="truncate">
+                    {p.title}
+                  </Text>
+                ))
+              )}
+              <Box display="flex" flexWrap="wrap" sx={{ gap: 2 }}>
+                {weekly.data.keywords.slice(0, 5).map((k) => (
+                  <Label key={k.keyword} variant="secondary">
+                    {k.keyword}
+                  </Label>
+                ))}
+              </Box>
+            </Box>
           )}
         </Card>
 
@@ -101,13 +130,13 @@ export function Home() {
           <CardState
             loading={trends.isPending}
             error={trends.isError}
-            empty={trends.data?.items.length === 0}
+            empty={trends.data?.top.length === 0}
           />
-          {trends.data && trends.data.items.length > 0 && (
+          {trends.data && trends.data.top.length > 0 && (
             <Box display="flex" flexWrap="wrap" sx={{ gap: 2 }}>
-              {trends.data.items.map((it) => (
-                <Label key={it.term} variant="accent">
-                  {it.term} · {it.count}
+              {trends.data.top.slice(0, 6).map((it) => (
+                <Label key={it.keyword} variant="accent">
+                  {it.keyword} · {it.count}
                 </Label>
               ))}
             </Box>
@@ -182,7 +211,7 @@ export function Home() {
                   {health.data.status}
                 </Label>
                 <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.muted" }}>
-                  {String(health.data.store.backend ?? "")}
+                  {health.data.store_backend}
                 </Text>
               </Box>
               <Box display="flex" flexWrap="wrap" sx={{ gap: 2 }}>

@@ -16,6 +16,7 @@ import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
 import { Research } from "./pages/Research";
 import { Shared } from "./pages/Shared";
+import { Trends } from "./pages/Trends";
 import { Write } from "./pages/Write";
 
 const queryClient = new QueryClient({
@@ -59,7 +60,7 @@ export default function App() {
                 <Route path="/write" element={<Write />} />
                 <Route path="/graph" element={<Graph />} />
                 <Route path="/library" element={<Library />} />
-                <Route path="/trends" element={<Placeholder titleKey="nav.trends" />} />
+                <Route path="/trends" element={<Trends />} />
                 <Route path="/learning" element={<Placeholder titleKey="nav.learning" />} />
                 <Route path="/analytics" element={<Placeholder titleKey="nav.analytics" />} />
                 <Route path="/settings" element={<Placeholder titleKey="nav.settings" />} />
