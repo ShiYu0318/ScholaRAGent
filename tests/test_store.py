@@ -1,12 +1,36 @@
-"""Store 抽象層（SQLite+FAISS 實作）：使用者與各功能域資料的 CRUD。"""
+"""Store 抽象層行為測試：同一套規格跑 SQLite+FAISS 與 Postgres+pgvector。
+
+Postgres 後端需要 TEST_DATABASE_URL（pgvector 已裝的資料庫）；未設定時
+自動 skip，CI 以 service container 提供。
+"""
+import os
+
 import pytest
 
 from src.store.sqlite_faiss import SqliteFaissStore
 
+_PG_URL = os.getenv("TEST_DATABASE_URL", "")
 
-@pytest.fixture
-def store(tmp_path, fake_embedder):
-    s = SqliteFaissStore(db_path=tmp_path / "store.db", embedder=fake_embedder)
+# 依外鍵順序 TRUNCATE，保每測試隔離
+_PG_TABLES = ("paper_embeddings", "interactions", "messages", "conversations",
+              "reading_list", "notification_preferences", "reminders",
+              "learning_paths", "user_skills", "feeds", "user_subscriptions",
+              "papers", "users")
+
+
+@pytest.fixture(params=[
+    "sqlite",
+    pytest.param("postgres", marks=pytest.mark.skipif(
+        not _PG_URL, reason="TEST_DATABASE_URL 未設定")),
+])
+def store(request, tmp_path, fake_embedder):
+    if request.param == "postgres":
+        from src.store.postgres_pgvector import PostgresPgvectorStore
+        s = PostgresPgvectorStore(dsn=_PG_URL, embedder=fake_embedder)
+        for table in _PG_TABLES:
+            s._conn.execute(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE")
+    else:
+        s = SqliteFaissStore(db_path=tmp_path / "store.db", embedder=fake_embedder)
     yield s
     s.close()
 
@@ -164,4 +188,5 @@ def test_stats(store):
     store.create_user("st@b.c")
     store.upsert_papers([{"id": "p1", "title": "T"}])
     s = store.stats()
-    assert s["users"] == 1 and s["papers"] == 1 and s["backend"] == "sqlite_faiss"
+    assert s["users"] == 1 and s["papers"] == 1
+    assert s["backend"] in ("sqlite_faiss", "postgres_pgvector")
