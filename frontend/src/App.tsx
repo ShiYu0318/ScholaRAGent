@@ -13,7 +13,9 @@ import { Graph } from "./pages/Graph";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
+import { Research } from "./pages/Research";
 import { Shared } from "./pages/Shared";
+import { Write } from "./pages/Write";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
@@ -52,8 +54,8 @@ export default function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/ask" element={<Ask />} />
                 <Route path="/conversations" element={<Conversations />} />
-                <Route path="/research" element={<Placeholder titleKey="nav.research" />} />
-                <Route path="/write" element={<Placeholder titleKey="nav.write" />} />
+                <Route path="/research" element={<Research />} />
+                <Route path="/write" element={<Write />} />
                 <Route path="/graph" element={<Graph />} />
                 <Route path="/library" element={<Placeholder titleKey="nav.library" />} />
                 <Route path="/trends" element={<Placeholder titleKey="nav.trends" />} />

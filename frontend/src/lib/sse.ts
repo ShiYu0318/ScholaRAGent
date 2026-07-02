@@ -19,10 +19,10 @@ export interface Citation {
   authors: string;
 }
 
-export async function streamSSE(
+export async function streamSSE<T = AskEvent>(
   path: string,
   body: unknown,
-  onEvent: (event: AskEvent) => void,
+  onEvent: (event: T) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -58,7 +58,7 @@ export async function streamSSE(
       const frame = buffer.slice(0, sep);
       buffer = buffer.slice(sep + 2);
       for (const line of frame.split("\n")) {
-        if (line.startsWith("data: ")) onEvent(JSON.parse(line.slice(6)) as AskEvent);
+        if (line.startsWith("data: ")) onEvent(JSON.parse(line.slice(6)) as T);
       }
     }
   }
