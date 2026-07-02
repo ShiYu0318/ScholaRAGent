@@ -54,7 +54,7 @@ export function Learning() {
     mutationFn: (newTopic: string) =>
       api<LearningPath>("/api/learning-paths", {
         method: "POST",
-        body: JSON.stringify({ topic: newTopic }),
+        body: { topic: newTopic },
       }),
     onSuccess: () => {
       setTopic("");
@@ -66,10 +66,10 @@ export function Learning() {
     mutationFn: ({ id, items }: { id: number; items: PathItem[] }) =>
       api<LearningPath>(`/api/learning-paths/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({
+        body: {
           items,
           progress: { done: items.filter((i) => i.done).length, total: items.length },
-        }),
+        },
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["learning-paths"] }),
   });
@@ -82,7 +82,7 @@ export function Learning() {
 
   const putSkill = useMutation({
     mutationFn: (body: Skill) =>
-      api<Skill>("/api/skills", { method: "PUT", body: JSON.stringify(body) }),
+      api<Skill>("/api/skills", { method: "PUT", body }),
     onSuccess: () => {
       setSkillName("");
       queryClient.invalidateQueries({ queryKey: ["skills"] });
