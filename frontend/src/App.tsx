@@ -6,10 +6,13 @@ import type { ReactNode } from "react";
 import { Shell } from "./components/Shell";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { AppThemeProvider } from "./theme";
+import { Ask } from "./pages/Ask";
 import { AuthCallback } from "./pages/AuthCallback";
+import { Conversations } from "./pages/Conversations";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
+import { Shared } from "./pages/Shared";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
@@ -37,6 +40,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/shared/:token" element={<Shared />} />
               <Route
                 element={
                   <RequireAuth>
@@ -45,8 +49,8 @@ export default function App() {
                 }
               >
                 <Route path="/" element={<Home />} />
-                <Route path="/ask" element={<Placeholder titleKey="nav.ask" />} />
-                <Route path="/conversations" element={<Placeholder titleKey="nav.conversations" />} />
+                <Route path="/ask" element={<Ask />} />
+                <Route path="/conversations" element={<Conversations />} />
                 <Route path="/research" element={<Placeholder titleKey="nav.research" />} />
                 <Route path="/write" element={<Placeholder titleKey="nav.write" />} />
                 <Route path="/graph" element={<Placeholder titleKey="nav.graph" />} />

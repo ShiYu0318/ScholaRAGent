@@ -26,6 +26,45 @@ class GroqClient:
         )
         return resp.choices[0].message.content.strip()
 
+    def stream_chat(self, system, user, temperature=0.3, max_tokens=1000):
+        """逐字串流版 _chat：yield 文字增量（SSE 用）。"""
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
+    def stream_answer(self, question, papers):
+        """answer 的串流版：依檢索論文逐字回答。"""
+        if not papers:
+            yield "目前知識庫沒有相關論文，請先抓取論文再提問。"
+            return
+        context = "\n\n".join(
+            f"[{i}] 標題：{p['title']}\n摘要：{p['abstract']}\n連結：{p['link']}"
+            for i, p in enumerate(papers, 1)
+        )
+        system = (
+            "你是 AI 研究助理。請『僅根據』以下提供的論文內容，用繁體中文回答使用者問題。"
+            "若提供內容不足以回答，請誠實說明。引用論文時用編號 [n] 對應。"
+        )
+        user = f"=== 論文資料 ===\n{context}\n\n=== 問題 ===\n{question}"
+        try:
+            yield from self.stream_chat(system, user)
+        except Exception as e:
+            self.logger.error(f"串流問答失敗: {e}")
+            yield f"回答時發生錯誤：{e}"
+
     def summarize(self, paper):
         """產生一篇論文的繁體中文重點摘要（2-3 句）。"""
         system = (

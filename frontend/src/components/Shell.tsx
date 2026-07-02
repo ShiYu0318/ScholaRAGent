@@ -13,6 +13,7 @@ import {
   CommentDiscussionIcon,
   GearIcon,
   GraphIcon,
+  HistoryIcon,
   HomeIcon,
   MoonIcon,
   MortarBoardIcon,
@@ -35,6 +36,7 @@ import { CommandPalette } from "./CommandPalette";
 export const NAV_ITEMS = [
   { path: "/", key: "nav.home", icon: HomeIcon },
   { path: "/ask", key: "nav.ask", icon: CommentDiscussionIcon },
+  { path: "/conversations", key: "nav.conversations", icon: HistoryIcon },
   { path: "/research", key: "nav.research", icon: BeakerIcon },
   { path: "/write", key: "nav.write", icon: PencilIcon },
   { path: "/graph", key: "nav.graph", icon: ShareAndroidIcon },

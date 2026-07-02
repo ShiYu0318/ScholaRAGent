@@ -49,6 +49,17 @@ export default {
       themeDay: "Day",
       themeNight: "Night",
     },
+    ask: {
+      placeholder: "Ask anything about the papers in your library.",
+      inputPlaceholder: "Ask a question… (Enter to send, Shift+Enter for newline)",
+      send: "Send",
+    },
+    conv: {
+      searchPlaceholder: "Search conversations",
+      share: "Share",
+      linkCopied: "Share link copied to clipboard.",
+      sharedNotFound: "This share link is invalid or expired.",
+    },
     home: {
       title: "Overview",
       todayDigest: "Today's digest",

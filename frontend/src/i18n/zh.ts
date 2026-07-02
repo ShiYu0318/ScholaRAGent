@@ -49,6 +49,17 @@ export default {
       themeDay: "日間",
       themeNight: "夜間",
     },
+    ask: {
+      placeholder: "針對文庫中的論文提出任何問題。",
+      inputPlaceholder: "輸入問題…（Enter 送出，Shift+Enter 換行）",
+      send: "送出",
+    },
+    conv: {
+      searchPlaceholder: "搜尋對話",
+      share: "分享",
+      linkCopied: "分享連結已複製到剪貼簿。",
+      sharedNotFound: "分享連結無效或已失效。",
+    },
     home: {
       title: "總覽",
       todayDigest: "今日快報",
