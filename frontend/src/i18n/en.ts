@@ -136,6 +136,16 @@ export default {
       feedsRefreshed: "Fetched {{fetched}} entries, {{added}} new.",
       state: { "to-read": "To read", reading: "Reading", done: "Done" },
     },
+    learning: {
+      topicPlaceholder: "Topic to learn, e.g. graph retrieval",
+      create: "Create path",
+      pathsTitle: "Learning paths",
+      emptyHint: "Create a path from any research topic; steps come from the LLM or your library.",
+      progress: "{{done}} of {{total}} steps done",
+      skillsTitle: "Skills",
+      skillPlaceholder: "Skill name",
+      levelLabel: "Level (0-100)",
+    },
     analytics: {
       range: "Range",
       days: "{{count}}d",

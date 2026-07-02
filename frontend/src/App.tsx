@@ -12,6 +12,7 @@ import { AuthCallback } from "./pages/AuthCallback";
 import { Conversations } from "./pages/Conversations";
 import { Graph } from "./pages/Graph";
 import { Home } from "./pages/Home";
+import { Learning } from "./pages/Learning";
 import { Library } from "./pages/Library";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
@@ -62,7 +63,7 @@ export default function App() {
                 <Route path="/graph" element={<Graph />} />
                 <Route path="/library" element={<Library />} />
                 <Route path="/trends" element={<Trends />} />
-                <Route path="/learning" element={<Placeholder titleKey="nav.learning" />} />
+                <Route path="/learning" element={<Learning />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/settings" element={<Placeholder titleKey="nav.settings" />} />
               </Route>

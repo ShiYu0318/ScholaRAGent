@@ -136,6 +136,16 @@ export default {
       feedsRefreshed: "抓取 {{fetched}} 則，新增 {{added}} 則。",
       state: { "to-read": "待讀", reading: "閱讀中", done: "已讀完" },
     },
+    learning: {
+      topicPlaceholder: "想學的主題，如 graph retrieval",
+      create: "建立路徑",
+      pathsTitle: "學習路徑",
+      emptyHint: "輸入任一研究主題建立路徑；步驟由 LLM 或文庫生成。",
+      progress: "已完成 {{done}}/{{total}} 步",
+      skillsTitle: "技能",
+      skillPlaceholder: "技能名稱",
+      levelLabel: "等級（0-100）",
+    },
     analytics: {
       range: "區間",
       days: "{{count}} 天",
