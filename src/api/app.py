@@ -12,6 +12,7 @@ from src import config
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
 from src.api.routers import conversations as conversations_router
+from src.api.routers import extras as extras_router
 from src.api.routers import feeds as feeds_router
 from src.api.routers import graph as graph_router
 from src.api.routers import insights as insights_router
@@ -63,6 +64,7 @@ def create_app() -> FastAPI:
     app.include_router(notifications_router.router)
     app.include_router(reminders_router.router)
     app.include_router(learning_router.router)
+    app.include_router(extras_router.router)
     return app
 
 
