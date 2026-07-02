@@ -199,6 +199,30 @@ cp .env.example .env        # then fill in your keys
 uv run python main.py       # start the bot
 ```
 
+### Web dashboard
+
+A full-stack dashboard (FastAPI + React/Vite/TypeScript + Primer, EN/ZH) covers streaming
+Q&A with citations, conversations and sharing, interactive D3 citation/concept graphs, deep
+research, writing tools, a reading kanban with RSS feeds and exports, trends, learning paths,
+analytics, and per-user notification scheduling. Design notes live in `docs/ui-dashboard-plan.md`.
+
+Development mode (two processes, Vite proxies `/api` to `:8000`):
+
+```bash
+uv run uvicorn src.api.app:app --port 8000    # API + Swagger at /docs
+cd frontend && npm install && npm run dev      # UI at http://localhost:5173
+```
+
+Single-container deployment (the image bakes the frontend build; FastAPI serves it):
+
+```bash
+docker compose up --build                      # SQLite + FAISS, data in ./data
+docker compose --profile postgres up --build   # optional Postgres + pgvector backend
+```
+
+For Postgres, set `STORE_BACKEND=postgres` and `DATABASE_URL` in `.env`
+(see `.env.example` for all dashboard variables: JWT, OAuth providers, scheduler).
+
 ## Configuration
 
 Settings live in `.env` (never committed). Required keys are marked; everything else is
@@ -222,6 +246,10 @@ optional and safely skipped when unset.
 | `LINE_CHANNEL_TOKEN` / `LINE_TO` | | Enable LINE delivery (Messaging API) |
 | `GITHUB_TOKEN` | | Optional, raises GitHub API rate limits |
 | `X_BEARER_TOKEN` | | Enables the X/Twitter crawler (X API v2 requires a paid plan) |
+| `JWT_SECRET` | | Dashboard auth secret (ephemeral if unset; set it in production) |
+| `GOOGLE/GITHUB/DISCORD_CLIENT_ID/SECRET` | | OAuth sign-in and Discord account linking |
+| `STORE_BACKEND` / `DATABASE_URL` | | `sqlite` (default) or `postgres` with pgvector |
+| `SCHEDULER_ENABLED` | | Per-user digest/reminder scheduler (compose sets it to 1) |
 
 The arXiv, news, Hacker News, Reddit, and GitHub crawlers work without credentials.
 Telegram/Email/LINE delivery and the X/Twitter crawler activate only once their keys are set.
@@ -264,10 +292,14 @@ configured platform.
 ## Testing
 
 The full suite is offline and deterministic. It uses a fake embedder, stubbed LLM and network
-clients, and injected transports, so no model downloads or credentials are needed.
+clients, and injected transports, so no model downloads or credentials are needed. Store
+behavior tests also run against Postgres+pgvector when `TEST_DATABASE_URL` is set (CI does
+this via a service container), and a Playwright UI smoke suite runs with `E2E=1` against
+local dev servers.
 
 ```bash
-uv run pytest        # 298 passed
+uv run pytest                    # 378 passed (postgres/e2e auto-skip locally)
+E2E=1 uv run pytest tests/e2e    # UI smoke, needs both dev servers running
 ```
 
 ## License
