@@ -10,6 +10,7 @@ from src import config
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
 from src.api.routers import conversations as conversations_router
+from src.api.routers import graph as graph_router
 from src.api.routers import health as health_router
 
 
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router.router)
     app.include_router(ask_router.router)
     app.include_router(conversations_router.router)
+    app.include_router(graph_router.router)
     return app
 
 

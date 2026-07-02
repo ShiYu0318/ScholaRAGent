@@ -9,6 +9,7 @@ import { AppThemeProvider } from "./theme";
 import { Ask } from "./pages/Ask";
 import { AuthCallback } from "./pages/AuthCallback";
 import { Conversations } from "./pages/Conversations";
+import { Graph } from "./pages/Graph";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Placeholder } from "./pages/Placeholder";
@@ -53,7 +54,7 @@ export default function App() {
                 <Route path="/conversations" element={<Conversations />} />
                 <Route path="/research" element={<Placeholder titleKey="nav.research" />} />
                 <Route path="/write" element={<Placeholder titleKey="nav.write" />} />
-                <Route path="/graph" element={<Placeholder titleKey="nav.graph" />} />
+                <Route path="/graph" element={<Graph />} />
                 <Route path="/library" element={<Placeholder titleKey="nav.library" />} />
                 <Route path="/trends" element={<Placeholder titleKey="nav.trends" />} />
                 <Route path="/learning" element={<Placeholder titleKey="nav.learning" />} />
