@@ -68,4 +68,23 @@ LINE_TO = os.getenv("LINE_TO", "")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # 選填，提高 GitHub API 額度
 X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "")  # X (Twitter) API v2，需付費方案
 
+# --- Web API / 認證 ---
+# JWT_SECRET 未設定時每次啟動隨機產生（重啟後舊 token 失效，僅適合本機開發）
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 預設 7 天
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
+API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# OAuth（金鑰未設定則該登入方式自動隱藏）
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET", "")
+DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
+DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
+
+# --- 儲存後端：sqlite（本機 SQLite+FAISS）或 postgres（Postgres+pgvector）---
+STORE_BACKEND = os.getenv("STORE_BACKEND", "sqlite")
+DATABASE_URL = os.getenv("DATABASE_URL", "")  # postgres 後端連線字串
+
 DATA_DIR.mkdir(exist_ok=True)
