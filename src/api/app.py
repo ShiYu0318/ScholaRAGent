@@ -15,6 +15,7 @@ from src.api.routers import conversations as conversations_router
 from src.api.routers import feeds as feeds_router
 from src.api.routers import graph as graph_router
 from src.api.routers import insights as insights_router
+from src.api.routers import learning as learning_router
 from src.api.routers import library as library_router
 from src.api.routers import health as health_router
 from src.api.routers import notifications as notifications_router
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(insights_router.router)
     app.include_router(notifications_router.router)
     app.include_router(reminders_router.router)
+    app.include_router(learning_router.router)
     return app
 
 
