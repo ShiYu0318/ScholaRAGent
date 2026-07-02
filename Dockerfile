@@ -1,0 +1,24 @@
+# 多階段建置：前端 Vite build → API image（FastAPI 直接服務前端靜態檔）。
+# docker build -t air-agent . && docker run --env-file .env -p 8000:8000 air-agent
+
+FROM node:22-alpine AS frontend
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM python:3.13-slim AS api
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+WORKDIR /app
+
+# 依賴層先建，讓程式碼變更不重裝依賴
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY src/ src/
+COPY --from=frontend /build/dist frontend/dist
+
+ENV PATH="/app/.venv/bin:$PATH"
+EXPOSE 8000
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,36 @@
+# 預設單容器（SQLite+FAISS，資料落在 ./data volume）。
+# 要用 Postgres+pgvector：docker compose --profile postgres up，
+# 並在 .env 設 STORE_BACKEND=postgres 與 DATABASE_URL（見 .env.example）。
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      SCHEDULER_ENABLED: "1"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg17
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: air_agent
+      POSTGRES_USER: air
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-air}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U air -d air_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

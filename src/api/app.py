@@ -4,9 +4,11 @@
 文件：http://localhost:8000/docs（Swagger）、/redoc（ReDoc）
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from src import config
 from src.api.routers import ask as ask_router
@@ -65,6 +67,12 @@ def create_app() -> FastAPI:
     app.include_router(reminders_router.router)
     app.include_router(learning_router.router)
     app.include_router(extras_router.router)
+
+    # 容器部署：前端 build 產物存在時由 API 直接服務（SPA 用 HashRouter，
+    # 不需 history fallback）；API 路由已註冊在前，優先於此 mount。
+    dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    if dist.is_dir():
+        app.mount("/", StaticFiles(directory=dist, html=True), name="frontend")
     return app
 
 
