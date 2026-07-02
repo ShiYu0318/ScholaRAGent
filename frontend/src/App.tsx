@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Shell } from "./components/Shell";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { AppThemeProvider } from "./theme";
+import { Analytics } from "./pages/Analytics";
 import { Ask } from "./pages/Ask";
 import { AuthCallback } from "./pages/AuthCallback";
 import { Conversations } from "./pages/Conversations";
@@ -62,7 +63,7 @@ export default function App() {
                 <Route path="/library" element={<Library />} />
                 <Route path="/trends" element={<Trends />} />
                 <Route path="/learning" element={<Placeholder titleKey="nav.learning" />} />
-                <Route path="/analytics" element={<Placeholder titleKey="nav.analytics" />} />
+                <Route path="/analytics" element={<Analytics />} />
                 <Route path="/settings" element={<Placeholder titleKey="nav.settings" />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

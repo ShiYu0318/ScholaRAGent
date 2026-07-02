@@ -136,6 +136,15 @@ export default {
       feedsRefreshed: "Fetched {{fetched}} entries, {{added}} new.",
       state: { "to-read": "To read", reading: "Reading", done: "Done" },
     },
+    analytics: {
+      range: "Range",
+      days: "{{count}}d",
+      activity: "Activity (last {{days}} days)",
+      actions: "Actions",
+      readingPipeline: "Reading pipeline",
+      topics: "Top topics",
+      library: "Library totals",
+    },
     trends: {
       granularity: "Granularity",
       granMonth: "Month",

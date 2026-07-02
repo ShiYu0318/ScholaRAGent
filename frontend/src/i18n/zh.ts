@@ -136,6 +136,15 @@ export default {
       feedsRefreshed: "抓取 {{fetched}} 則，新增 {{added}} 則。",
       state: { "to-read": "待讀", reading: "閱讀中", done: "已讀完" },
     },
+    analytics: {
+      range: "區間",
+      days: "{{count}} 天",
+      activity: "近 {{days}} 天活動",
+      actions: "互動行為",
+      readingPipeline: "閱讀管線",
+      topics: "熱門主題",
+      library: "文庫總量",
+    },
     trends: {
       granularity: "時間粒度",
       granMonth: "月",
