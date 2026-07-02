@@ -15,8 +15,8 @@ import { Home } from "./pages/Home";
 import { Learning } from "./pages/Learning";
 import { Library } from "./pages/Library";
 import { Login } from "./pages/Login";
-import { Placeholder } from "./pages/Placeholder";
 import { Research } from "./pages/Research";
+import { Settings } from "./pages/Settings";
 import { Shared } from "./pages/Shared";
 import { Trends } from "./pages/Trends";
 import { Write } from "./pages/Write";
@@ -65,7 +65,7 @@ export default function App() {
                 <Route path="/trends" element={<Trends />} />
                 <Route path="/learning" element={<Learning />} />
                 <Route path="/analytics" element={<Analytics />} />
-                <Route path="/settings" element={<Placeholder titleKey="nav.settings" />} />
+                <Route path="/settings" element={<Settings />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
