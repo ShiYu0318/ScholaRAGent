@@ -15,8 +15,6 @@ Discord bot, and multi-platform notifications.
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Package manager: uv](https://img.shields.io/badge/deps-uv-purple.svg)](https://github.com/astral-sh/uv)
 
-<img src=".github/assets/dashboard-home.png" alt="AIR-Agent dashboard overview" width="90%" />
-
 </div>
 
 ---
@@ -30,12 +28,14 @@ Discord bot, and multi-platform notifications.
 - [Architecture](#architecture)
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
-- [Getting started](#getting-started)
+- [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Usage](#usage)
 - [API reference](#api-reference)
-- [Data model](#data-model)
+- [Database schema](#database-schema)
 - [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
 - [License](#license)
 
 ## Overview
@@ -136,10 +136,6 @@ degrade gracefully when their services or models are unavailable.
 - **Health monitoring** — store statistics, scheduler status, and provider-key readiness.
 
 ## Web dashboard
-
-<div align="center">
-<img src=".github/assets/dashboard-trends.png" alt="Trends page" width="90%" />
-</div>
 
 | Page | What it does |
 | --- | --- |
@@ -266,23 +262,54 @@ docker-compose.yml       Single container; optional Postgres via --profile postg
 .github/workflows/       CI: backend tests (with pgvector), frontend build, docker build
 ```
 
-## Getting started
+## Quick start
 
 ### Prerequisites
-- Python 3.13 and [`uv`](https://github.com/astral-sh/uv)
-- Node.js 22+ (frontend development only)
-- A Groq API key; a Discord bot token if you run the bot (see [Configuration](#configuration))
 
-### Installation
+1. Groq API key — https://console.groq.com (free tier works)
+2. Python 3.13 + [`uv`](https://github.com/astral-sh/uv), or Docker
+3. Discord bot token (optional, only for the bot) — https://discord.com/developers/applications
+4. Node.js 22+ (optional, only for frontend development)
+
+### Option 1: Docker Compose (recommended)
+
+Single container — the image bakes the frontend build and FastAPI serves it:
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/ShiYu0318/AIR-Agent.git
+cd AIR-Agent
+
+# 2. Set up environment variables
+cp backend/.env.example backend/.env
+# Edit backend/.env with your keys (GROQ_API_KEY at minimum)
+
+# 3. Start
+docker compose up --build                      # SQLite + FAISS, data in ./backend/data
+docker compose --profile postgres up --build   # optional Postgres + pgvector backend
+
+# 4. Access the application
+# Web + API:  http://localhost:8000
+# API docs:   http://localhost:8000/docs
+```
+
+For Postgres, also set `STORE_BACKEND=postgres` and `DATABASE_URL` in `backend/.env`.
+
+### Option 2: Local development
+
+```bash
+# Backend (dashboard API)
 cd backend
 uv sync                     # install dependencies (includes PyTorch; first run is slow)
 cp .env.example .env        # then fill in your keys
-
 uv run python main.py api   # dashboard API at :8000 (serves frontend/dist if built)
 uv run python main.py bot   # or: the Discord bot
 uv run python main.py all   # or: both at once
+
+# Frontend (in another terminal, hot reload; Vite proxies /api to :8000)
+cd frontend
+npm install
+npm run dev                 # UI at http://localhost:5173
 ```
 
 `uv run` uses the project virtualenv automatically. If you prefer an activated shell:
@@ -291,30 +318,37 @@ uv run python main.py all   # or: both at once
 source backend/.venv/bin/activate   # then run: python main.py api
 ```
 
-### Frontend development
+### First steps
 
-Two processes; Vite proxies `/api` to `:8000` with hot reload:
-
-```bash
-cd backend && uv run python main.py api        # API + Swagger at /docs
-cd frontend && npm install && npm run dev      # UI at http://localhost:5173
-```
-
-### Docker deployment
-
-Single container — the image bakes the frontend build and FastAPI serves it:
-
-```bash
-docker compose up --build                      # SQLite + FAISS, data in ./backend/data
-docker compose --profile postgres up --build   # optional Postgres + pgvector backend
-```
-
-For Postgres, set `STORE_BACKEND=postgres` and `DATABASE_URL` in `backend/.env`.
+1. Open http://localhost:5173 (dev) or http://localhost:8000 (Docker) and create an
+   account — or sign in with Google/GitHub if OAuth keys are configured.
+2. Fetch papers: **Library -> Fetch today** pulls and indexes the latest arXiv batch.
+3. Ask a question from **Ask** — answers stream in with cited sources.
+4. Explore: expand a citation graph in **Graph**, add RSS feeds in **Library -> Feeds**,
+   set your digest schedule in **Settings**, and watch **Trends** fill up as the library
+   grows.
 
 ## Configuration
 
-Settings live in `backend/.env` (never committed). Required keys are marked; everything else
-is optional and safely skipped when unset.
+Settings live in `backend/.env` (never committed). The minimum working configuration:
+
+```bash
+# Required — dashboard
+GROQ_API_KEY=your-groq-api-key
+
+# Recommended in production
+JWT_SECRET=your-secret-key          # openssl rand -hex 32; ephemeral if unset
+
+# Required only for the Discord bot
+DISCORD_BOT_TOKEN=your-bot-token
+DISCORD_CHANNEL_ID=your-channel-id
+
+# Deployment switches
+SCHEDULER_ENABLED=1                 # per-user digests and reminders (compose sets this)
+STORE_BACKEND=sqlite                # or postgres (+ DATABASE_URL)
+```
+
+Everything else is optional and safely skipped when unset — the full reference:
 
 | Variable | Required | Description |
 | --- | :---: | --- |
@@ -356,9 +390,8 @@ and rebuilds the index automatically.
 
 ## Usage
 
-Open http://localhost:5173 (dev) or http://localhost:8000 (Docker), create an account (or
-sign in with Google/GitHub), fetch today's papers from **Library -> Fetch today**, then ask
-questions from **Ask**. Interactive API docs live at http://localhost:8000/docs.
+The dashboard is self-explanatory after [First steps](#first-steps); every page is described
+in [Web dashboard](#web-dashboard), and the full REST surface in [API reference](#api-reference).
 
 ### Discord bot commands
 
@@ -504,22 +537,44 @@ OAuth. Streaming endpoints return Server-Sent Events (`data: {json}\n\n` frames)
 | POST | `/api/eval` | RAG evaluation metrics: precision@k, recall, MRR, optional faithfulness |
 | POST | `/api/agent` | Tool-calling agent (503 without `GROQ_API_KEY`) |
 
-## Data model
+## Database schema
 
-One schema across both store backends (SQLite and Postgres):
+One schema across both store backends (SQLite + FAISS locally, Postgres + pgvector in
+deployment), behind the `src/store` abstraction:
 
-| Table | Purpose |
-| --- | --- |
-| `users` | Accounts: email, password hash, OAuth ids (Google/GitHub/Discord), display name, locale |
-| `papers` | Shared paper library: title, abstract, authors, link, published, summary, source |
-| `interactions` | Per-user actions on papers (like/click/ask...), feeds ranking and analytics |
-| `conversations` / `messages` | Persistent chat history with citations and share tokens |
-| `feeds` / `user_subscriptions` | Per-user RSS sources and keyword subscriptions |
-| `reading_list` | Kanban items (to-read/reading/done) with tags and notes |
-| `notification_preferences` | Frequency, time, timezone, quiet hours, channels, dedupe |
-| `reminders` | Due-dated to-dos polled by the scheduler |
-| `learning_paths` / `user_skills` | Study plans with progress; skill levels |
-| `paper_embeddings` | (Postgres) pgvector embeddings; FAISS index files locally |
+```
+users                        papers                      interactions
+├── id                      ├── id (arXiv id / slug)    ├── id
+├── email (unique)          ├── title                   ├── paper_id (FK)
+├── password_hash           ├── abstract                ├── user_id
+├── google_sub              ├── authors                 ├── action (like/click/ask...)
+├── github_id               ├── link                    ├── value
+├── discord_id              ├── published               └── created_at
+├── display_name            ├── summary
+└── locale                  └── source                  paper_embeddings (Postgres)
+                                                        ├── paper_id (FK, cascade)
+feeds                        user_subscriptions         └── embedding (vector)
+├── id                      ├── user_id                    (FAISS index files locally)
+├── user_id                 ├── name (unique per user)
+├── url (unique per user)   └── keywords (JSON)         notification_preferences
+├── title / category                                    ├── user_id (PK)
+└── enabled                  reading_list               ├── frequency (daily/weekly/off)
+                            ├── user_id + paper_id (PK) ├── hour / minute / timezone
+conversations               ├── title / state           ├── quiet_start / quiet_end
+├── id                      ├── tags (JSON)             ├── min_score / dedupe
+├── user_id                 └── note                    └── channels (JSON)
+├── title
+├── share_token              reminders                   learning_paths
+└── created_at / updated_at ├── id                      ├── id
+                            ├── user_id                 ├── user_id
+messages                    ├── text                    ├── topic
+├── id                      ├── due_at                  ├── items (JSON, checkboxes)
+├── conversation_id         ├── context (JSON)          └── progress (JSON)
+├── role                    └── done
+├── content                                              user_skills
+└── citations (JSON)                                    ├── user_id + skill (PK)
+                                                        └── level (0-100)
+```
 
 ## Testing
 
@@ -538,6 +593,50 @@ E2E=1 uv run pytest tests/e2e    # UI smoke, needs both dev servers running
 CI runs the backend suite against a real pgvector service container (389 tests), type-checks
 and builds the frontend, and validates the Docker image build on `main`.
 
+## Troubleshooting
+
+**Backend changes not taking effect** — the API runs without auto-reload; restart
+`uv run python main.py api` after editing backend code. Frontend changes hot-reload via Vite.
+
+**First run is slow / large downloads** — `uv sync` installs PyTorch, and the first
+embedding call downloads `all-MiniLM-L6-v2` (~90 MB). Both are cached afterwards.
+
+**Logged out after every restart** — set `JWT_SECRET` in `backend/.env`; without it a random
+secret is generated per process and old tokens become invalid.
+
+**OAuth buttons missing / return 404** — Google/GitHub/Discord providers only activate when
+their `*_CLIENT_ID` and `*_CLIENT_SECRET` are set. Check `GET /auth/providers`.
+
+**Postgres errors on startup** — the database must have the pgvector extension available
+(use the `pgvector/pgvector` image or `CREATE EXTENSION vector`), and `DATABASE_URL` must
+be reachable. The compose `--profile postgres` service handles both.
+
+**Port already in use** — another `uvicorn`/`vite` instance is running:
+`pkill -f "main.py api"` or change `--port`.
+
+**Digests never arrive** — set `SCHEDULER_ENABLED=1` (compose does this automatically),
+then check `GET /api/health` for `scheduler.running: true` and your channel keys under
+`providers`.
+
+## Contributing
+
+1. Fork the repository and create a feature branch: `git checkout -b feature/amazing-feature`
+2. Make your changes and add tests (offline stubs; see `backend/tests/` for patterns)
+3. Run the checks locally:
+   ```bash
+   cd backend && uv run pytest -q
+   cd frontend && npx tsc --noEmit && npm run build
+   ```
+4. Commit with a conventional message: `feat(scope): add amazing feature`
+5. Push and open a Pull Request — CI must pass (backend + pgvector, frontend, Docker build)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Acknowledgments
+
+[Groq](https://groq.com) · [arXiv](https://arxiv.org) · [OpenAlex](https://openalex.org) ·
+[Primer](https://primer.style) · [FAISS](https://github.com/facebookresearch/faiss) ·
+[sentence-transformers](https://www.sbert.net) · [pgvector](https://github.com/pgvector/pgvector) ·
+[FastAPI](https://fastapi.tiangolo.com) · [uv](https://github.com/astral-sh/uv)
