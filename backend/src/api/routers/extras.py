@@ -71,16 +71,55 @@ def add_memory(body: MemoryBody, user=Depends(get_current_user)):
 
 
 # ---- RAG 評估 ----
+_judge_llm = None
+_judge_lock = threading.Lock()
+
+
+def get_judge_llm():
+    global _judge_llm
+    with _judge_lock:
+        if _judge_llm is None:
+            if not config.GROQ_API_KEY:
+                raise HTTPException(status_code=503,
+                                    detail="未設定 GROQ_API_KEY，judge 評估不可用")
+            from src.llm.groq_client import GroqClient
+            _judge_llm = GroqClient()
+    return _judge_llm
+
+
+def set_judge_llm(llm):
+    """測試注入；回傳先前實例。"""
+    global _judge_llm
+    prev, _judge_llm = _judge_llm, llm
+    return prev
+
+
 class EvalBody(BaseModel):
-    retrieved_ids: list[str] = Field(min_length=1)
-    relevant_ids: list[str] = Field(min_length=1)
+    engine: str = Field(default="offline", pattern="^(offline|judge)$")
+    # offline：確定性排序/重疊指標
+    retrieved_ids: list[str] | None = None
+    relevant_ids: list[str] | None = None
     k: int = Field(default=4, ge=1, le=50)
+    # judge：RAGAS 式 LLM-as-judge 指標
+    question: str | None = None
     answer: str | None = None
     contexts: list[str] | None = None
+    ground_truth: str | None = None
 
 
 @router.post("/eval")
 def evaluate(body: EvalBody, user=Depends(get_current_user)):
+    if body.engine == "judge":
+        if not (body.question and body.answer and body.contexts):
+            raise HTTPException(status_code=422,
+                                detail="judge 模式需要 question、answer、contexts")
+        from src.rag.llm_judge import evaluate_answer
+        return evaluate_answer(get_judge_llm(), body.question, body.answer,
+                               body.contexts, ground_truth=body.ground_truth)
+
+    if not (body.retrieved_ids and body.relevant_ids):
+        raise HTTPException(status_code=422,
+                            detail="offline 模式需要 retrieved_ids、relevant_ids")
     result = {
         "precision_at_k": precision_at_k(body.retrieved_ids, body.relevant_ids, body.k),
         "recall": recall(body.retrieved_ids, body.relevant_ids),

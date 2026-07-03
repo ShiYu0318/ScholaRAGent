@@ -87,6 +87,52 @@ def test_eval_metrics(api, auth):
     assert 0.0 <= data["faithfulness"] <= 1.0
 
 
+def test_eval_judge_engine(api, auth):
+    class JudgeStub:
+        def _chat(self, system, user, **kwargs):
+            if "事實查核員" in system:
+                return '{"claims": [{"claim": "A", "supported": true}]}'
+            if "切題程度" in system:
+                return '{"score": 9}'
+            if "實質幫助" in system:
+                return '{"relevant": [true]}'
+            return "{}"
+
+    client, _ = api
+    prev = extras_module.set_judge_llm(JudgeStub())
+    try:
+        body = {"engine": "judge", "question": "什麼是 GraphRAG？",
+                "answer": "GraphRAG 是圖增強檢索。", "contexts": ["GraphRAG 定義……"]}
+        data = client.post("/api/eval", json=body, headers=auth).json()
+        assert data["faithfulness"] == 1.0
+        assert data["answer_relevancy"] == 0.9
+        assert data["context_precision"] == 1.0
+        assert "context_recall" not in data  # 未提供 ground_truth
+        # judge 模式缺必要欄位 -> 422
+        assert client.post("/api/eval", json={"engine": "judge", "question": "q"},
+                           headers=auth).status_code == 422
+    finally:
+        extras_module.set_judge_llm(prev)
+
+
+def test_eval_judge_degrades_without_key(api, auth, monkeypatch):
+    from src import config
+    client, _ = api
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    prev = extras_module.set_judge_llm(None)
+    try:
+        body = {"engine": "judge", "question": "q", "answer": "a", "contexts": ["c"]}
+        assert client.post("/api/eval", json=body, headers=auth).status_code == 503
+    finally:
+        extras_module.set_judge_llm(prev)
+
+
+def test_eval_offline_requires_id_lists(api, auth):
+    client, _ = api
+    assert client.post("/api/eval", json={"engine": "offline"},
+                       headers=auth).status_code == 422
+
+
 def test_agent_with_stub_and_degradation(api, auth, monkeypatch):
     client, _ = api
     data = client.post("/api/agent", json={"message": "找 RAG 論文"},

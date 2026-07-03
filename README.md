@@ -178,6 +178,13 @@ modules:
 | Adaptive RAG | complexity-aware retrieval-depth selection |
 | Agentic RAG | iterative retrieval, deep research, multi-agent pipeline |
 
+Evaluation runs on two tracks: deterministic offline metrics (precision@k, recall, MRR,
+lexical faithfulness, citation accuracy) for CI-safe regression, and **RAGAS-style
+LLM-as-judge metrics** (claim-level faithfulness, answer relevancy, context
+precision/recall) implemented natively on the Groq client — no `ragas`/langchain
+dependency. `compare_pipelines` scores multiple RAG configurations on a shared golden
+dataset for paradigm-comparison experiments.
+
 ## Architecture
 
 ```
@@ -534,7 +541,7 @@ OAuth. Streaming endpoints return Server-Sent Events (`data: {json}\n\n` frames)
 | GET | `/api/sources` | Data-source configuration status |
 | GET | `/api/memory` | Your agent memory items (`?kind=&contains=&limit=`) |
 | POST | `/api/memory` | Add a memory item (201) |
-| POST | `/api/eval` | RAG evaluation metrics: precision@k, recall, MRR, optional faithfulness |
+| POST | `/api/eval` | RAG evaluation — `engine=offline` (default): precision@k, recall, MRR, lexical faithfulness; `engine=judge`: RAGAS-style LLM-judged faithfulness, answer relevancy, context precision/recall (503 without `GROQ_API_KEY`) |
 | POST | `/api/agent` | Tool-calling agent (503 without `GROQ_API_KEY`) |
 
 ## Database schema
