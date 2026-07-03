@@ -34,7 +34,6 @@ Discord bot, and multi-platform notifications.
 - [API reference](#api-reference)
 - [Database schema](#database-schema)
 - [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -593,31 +592,6 @@ E2E=1 uv run pytest tests/e2e    # UI smoke, needs both dev servers running
 CI runs the backend suite against a real pgvector service container (389 tests), type-checks
 and builds the frontend, and validates the Docker image build on `main`.
 
-## Troubleshooting
-
-**Backend changes not taking effect** — the API runs without auto-reload; restart
-`uv run python main.py api` after editing backend code. Frontend changes hot-reload via Vite.
-
-**First run is slow / large downloads** — `uv sync` installs PyTorch, and the first
-embedding call downloads `all-MiniLM-L6-v2` (~90 MB). Both are cached afterwards.
-
-**Logged out after every restart** — set `JWT_SECRET` in `backend/.env`; without it a random
-secret is generated per process and old tokens become invalid.
-
-**OAuth buttons missing / return 404** — Google/GitHub/Discord providers only activate when
-their `*_CLIENT_ID` and `*_CLIENT_SECRET` are set. Check `GET /auth/providers`.
-
-**Postgres errors on startup** — the database must have the pgvector extension available
-(use the `pgvector/pgvector` image or `CREATE EXTENSION vector`), and `DATABASE_URL` must
-be reachable. The compose `--profile postgres` service handles both.
-
-**Port already in use** — another `uvicorn`/`vite` instance is running:
-`pkill -f "main.py api"` or change `--port`.
-
-**Digests never arrive** — set `SCHEDULER_ENABLED=1` (compose does this automatically),
-then check `GET /api/health` for `scheduler.running: true` and your channel keys under
-`providers`.
-
 ## Contributing
 
 1. Fork the repository and create a feature branch: `git checkout -b feature/amazing-feature`
@@ -633,10 +607,3 @@ then check `GET /api/health` for `scheduler.running: true` and your channel keys
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-## Acknowledgments
-
-[Groq](https://groq.com) · [arXiv](https://arxiv.org) · [OpenAlex](https://openalex.org) ·
-[Primer](https://primer.style) · [FAISS](https://github.com/facebookresearch/faiss) ·
-[sentence-transformers](https://www.sbert.net) · [pgvector](https://github.com/pgvector/pgvector) ·
-[FastAPI](https://fastapi.tiangolo.com) · [uv](https://github.com/astral-sh/uv)
