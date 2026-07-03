@@ -2,10 +2,11 @@
 
 # AIR-Agent
 
-**AI Research Agent** — an autonomous research copilot that collects papers and AI news
-from multiple sources, summarizes them with an LLM, answers questions over a vector and
-graph knowledge base, and delivers everything through a full-stack web dashboard, a
-Discord bot, and multi-platform notifications.
+**AIR-Agent** is a full-stack open-source platform for agentic AI research assistance via
+multi-paradigm RAG: it collects papers and news from many sources, answers questions with
+streaming cited retrieval and GraphRAG knowledge graphs, runs deep-research agents and
+writing tools, and delivers personalized digests, trends, and analytics through a bilingual
+web dashboard and Discord bot — one Docker container, SQLite+FAISS or Postgres+pgvector.
 
 [![CI](https://github.com/ShiYu0318/AIR-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/AIR-Agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
