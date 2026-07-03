@@ -1,5 +1,5 @@
 // JWT fetch 封裝：自動帶 Authorization，統一錯誤型別。
-const TOKEN_KEY = "air.token";
+const TOKEN_KEY = "ragency.token";
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);

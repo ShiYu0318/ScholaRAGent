@@ -42,7 +42,7 @@ METADATA_PATH = DATA_DIR / "metadata.json"
 SCHEDULE_PATH = DATA_DIR / "schedule.json"  # 持久化使用者設定的推送時間
 
 # --- 關聯式資料庫（SQLite）---
-DB_PATH = DATA_DIR / "air_agent.db"
+DB_PATH = DATA_DIR / "ragency.db"
 
 # --- 記憶模組 ---
 MEMORY_PATH = DATA_DIR / "memory.json"

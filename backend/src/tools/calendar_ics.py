@@ -22,13 +22,13 @@ def build_ics(title, date, time=None, duration_hours=1, description=""):
     - time：'HH:MM'，省略則為整日事件。
     """
     ymd = date.replace("-", "")
-    uid = hashlib.sha1(f"{title}{date}{time}".encode("utf-8")).hexdigest()[:16] + "@air-agent"
+    uid = hashlib.sha1(f"{title}{date}{time}".encode("utf-8")).hexdigest()[:16] + "@ragency"
     dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//AIR-Agent//Calendar//EN",
+        "PRODID:-//RAGency//Calendar//EN",
         "BEGIN:VEVENT",
         f"UID:{uid}",
         f"DTSTAMP:{dtstamp}",

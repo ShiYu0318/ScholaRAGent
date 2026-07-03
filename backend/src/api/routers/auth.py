@@ -141,7 +141,7 @@ def oauth_callback(provider: str, code: str = "", state: str = "",
         if user:
             store.update_user(user["id"], **{id_field: profile["sub"]})
     if not user:
-        email = profile.get("email") or f"{provider}-{profile['sub']}@users.noreply.air-agent"
+        email = profile.get("email") or f"{provider}-{profile['sub']}@users.noreply.ragency"
         try:
             user = store.create_user(email=email, display_name=profile.get("name"),
                                      **{id_field: profile["sub"]})

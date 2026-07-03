@@ -1,6 +1,6 @@
 # 多階段建置：前端 Vite build → API image（FastAPI 直接服務前端靜態檔）。
 # 容器內沿用 monorepo 佈局（/app/backend + /app/frontend/dist），路徑推導與本機一致。
-# docker build -t air-agent . && docker run --env-file backend/.env -p 8000:8000 air-agent
+# docker build -t ragency . && docker run --env-file backend/.env -p 8000:8000 ragency
 
 FROM node:22-alpine AS frontend
 WORKDIR /build

@@ -412,10 +412,10 @@ def build_bot():
         for chunk in _split(reply):
             await interaction.channel.send(chunk)
 
-    @bot.tree.command(name="help", description="顯示 AIR Agent 指令說明")
+    @bot.tree.command(name="help", description="顯示 RAGency 指令說明")
     async def help_cmd(interaction: discord.Interaction):
         hour, minute = _load_schedule()
-        embed = discord.Embed(title="AIR Agent 指令", color=0x4F46E5)
+        embed = discord.Embed(title="RAGency 指令", color=0x4F46E5)
         embed.add_field(name="/daily", value="立即抓取並推送今日 AI 論文", inline=False)
         embed.add_field(name="/ask <問題>", value="依據已收錄論文回答你的問題", inline=False)
         embed.add_field(name="/report <主題>", value="自動蒐集相關論文並產生完整研究報告", inline=False)

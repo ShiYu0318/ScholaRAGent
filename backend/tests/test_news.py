@@ -59,7 +59,7 @@ def test_fetch_ai_news_limit_and_headers():
     crawler = NewsCrawler(feeds=["http://feed"], session=sess)
     items = crawler.fetch_ai_news(limit=1)
     assert len(items) == 1
-    assert sess.calls[0]["headers"]["User-Agent"].startswith("AIR-Agent")
+    assert sess.calls[0]["headers"]["User-Agent"].startswith("RAGency")
 
 
 def test_ids_are_stable_and_unique():

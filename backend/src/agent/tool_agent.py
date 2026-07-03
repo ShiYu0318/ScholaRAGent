@@ -6,7 +6,7 @@ client 需為 OpenAI 相容用戶端（Groq 亦相容），具
 from src.utils.logger import get_logger
 
 _DEFAULT_SYSTEM = (
-    "你是 AIR Agent 的智慧助理。可使用提供的工具查論文、看趨勢、管理待辦。"
+    "你是 RAGency 的智慧助理。可使用提供的工具查論文、看趨勢、管理待辦。"
     "需要外部資料時務必呼叫工具，不要臆測。最後用繁體中文簡潔回覆使用者。"
 )
 

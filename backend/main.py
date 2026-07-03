@@ -1,4 +1,4 @@
-"""AIR Agent 統一進入點（在 backend/ 目錄下執行）：
+"""RAGency 統一進入點（在 backend/ 目錄下執行）：
 
     uv run python main.py api    # 儀表板 API :8000（frontend/dist 存在時一併服務前端）
     uv run python main.py bot    # Discord bot
@@ -30,12 +30,12 @@ def run_bot():
         return
     from src.bot.discord_bot import build_bot
     bot = build_bot()
-    logger.info("啟動 AIR Agent Discord bot…")
+    logger.info("啟動 RAGency Discord bot…")
     bot.run(config.DISCORD_BOT_TOKEN)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AIR Agent 進入點")
+    parser = argparse.ArgumentParser(description="RAGency 進入點")
     parser.add_argument("mode", nargs="?", default="api",
                         choices=["api", "bot", "all"],
                         help="api（預設）｜bot｜all")

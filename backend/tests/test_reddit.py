@@ -45,7 +45,7 @@ def test_fetch_top_parses_and_limits():
     crawler = RedditCrawler(session=sess)
     items = crawler.fetch_top("MachineLearning", limit=3)
     assert len(items) == 3
-    assert sess.calls[0]["headers"]["User-Agent"].startswith("AIR-Agent")
+    assert sess.calls[0]["headers"]["User-Agent"].startswith("RAGency")
 
 
 def test_fetch_ai_discussions_merges_and_sorts():

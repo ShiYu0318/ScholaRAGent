@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-const THEME_KEY = "air.theme";
+const THEME_KEY = "ragency.theme";
 
 type Mode = "night" | "day";
 

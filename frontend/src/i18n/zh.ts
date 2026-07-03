@@ -1,6 +1,6 @@
 export default {
   translation: {
-    app: { name: "AIR-Agent", tagline: "研究副駕" },
+    app: { name: "RAGency", tagline: "研究副駕" },
     nav: {
       home: "總覽",
       ask: "問答",

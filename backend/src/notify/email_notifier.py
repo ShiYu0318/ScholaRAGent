@@ -31,14 +31,14 @@ class EmailNotifier(Notifier):
     def enabled(self):
         return bool(self.host and self.sender and self.recipients)
 
-    def build_message(self, text, subject="AIR Agent 每日 AI 摘要"):
+    def build_message(self, text, subject="RAGency 每日 AI 摘要"):
         msg = MIMEText(text, "plain", "utf-8")
         msg["Subject"] = subject
         msg["From"] = self.sender
         msg["To"] = ", ".join(self.recipients)
         return msg
 
-    def send(self, text, subject="AIR Agent 每日 AI 摘要"):
+    def send(self, text, subject="RAGency 每日 AI 摘要"):
         if not self.enabled:
             self.logger.info("Email 未設定，略過")
             return False

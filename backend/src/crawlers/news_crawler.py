@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 
 from src.utils.logger import get_logger
 
-_UA = "AIR-Agent/1.0 (news reader)"
+_UA = "RAGency/1.0 (news reader)"
 _DEFAULT_FEEDS = (
     "https://news.google.com/rss/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en",
 )

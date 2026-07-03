@@ -41,7 +41,7 @@ async def _lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="AIR-Agent API",
+        title="RAGency API",
         description="AI 研究副駕：RAG 問答、GraphRAG、深度研究、文獻工具、個人化推送。",
         version="2.0.0",
         lifespan=_lifespan,

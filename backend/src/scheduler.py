@@ -106,7 +106,7 @@ class SchedulerManager:
         if not papers:
             return None
         lines = [f"- {p.get('title', '')}\n  {p.get('link', '')}" for p in papers]
-        text = "AIR-Agent 個人化摘要\n" + "\n".join(lines)
+        text = "RAGency 個人化摘要\n" + "\n".join(lines)
         return self._push(text, prefs.get("channels") or [])
 
     def _in_quiet(self, prefs, now=None):

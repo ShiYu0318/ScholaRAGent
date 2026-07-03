@@ -1,14 +1,14 @@
 <div align="center">
 
-# AIR-Agent
+# RAGency
 
-**AIR-Agent** is a full-stack open-source platform for agentic AI research assistance via
+**RAGency** is a full-stack open-source platform for agentic AI research assistance via
 multi-paradigm RAG: it collects papers and news from many sources, answers questions with
 streaming cited retrieval and GraphRAG knowledge graphs, runs deep-research agents and
 writing tools, and delivers personalized digests, trends, and analytics through a bilingual
 web dashboard and Discord bot — one Docker container, SQLite+FAISS or Postgres+pgvector.
 
-[![CI](https://github.com/ShiYu0318/AIR-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/AIR-Agent/actions/workflows/ci.yml)
+[![CI](https://github.com/ShiYu0318/RAGency/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/RAGency/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/api-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
@@ -40,7 +40,7 @@ web dashboard and Discord bot — one Docker container, SQLite+FAISS or Postgres
 
 ## Overview
 
-AIR-Agent keeps you on top of fast-moving AI research without the daily manual grind. It
+RAGency keeps you on top of fast-moving AI research without the daily manual grind. It
 gathers the latest papers and community discussion from many sources, distills each item
 into a concise summary, and builds a searchable knowledge base you can query in natural
 language. Retrieval spans both a dense/sparse vector index and a citation/concept graph, so
@@ -165,7 +165,7 @@ Design notes:
 
 ## RAG design
 
-AIR-Agent implements the major retrieval-augmented generation paradigms as composable
+RAGency implements the major retrieval-augmented generation paradigms as composable
 modules:
 
 | Paradigm | Where |
@@ -277,8 +277,8 @@ Single container — the image bakes the frontend build and FastAPI serves it:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/ShiYu0318/AIR-Agent.git
-cd AIR-Agent
+git clone https://github.com/ShiYu0318/RAGency.git
+cd RAGency
 
 # 2. Set up environment variables
 cp backend/.env.example backend/.env

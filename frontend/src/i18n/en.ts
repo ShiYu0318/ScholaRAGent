@@ -1,6 +1,6 @@
 export default {
   translation: {
-    app: { name: "AIR-Agent", tagline: "Research copilot" },
+    app: { name: "RAGency", tagline: "Research copilot" },
     nav: {
       home: "Overview",
       ask: "Ask",

@@ -8,7 +8,7 @@ import requests
 
 from src.utils.logger import get_logger
 
-_UA = "AIR-Agent/1.0 (research reader)"
+_UA = "RAGency/1.0 (research reader)"
 _DEFAULT_SUBS = ("MachineLearning", "LocalLLaMA", "artificial")
 
 
