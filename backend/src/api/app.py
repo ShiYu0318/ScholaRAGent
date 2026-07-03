@@ -68,9 +68,10 @@ def create_app() -> FastAPI:
     app.include_router(learning_router.router)
     app.include_router(extras_router.router)
 
-    # 容器部署：前端 build 產物存在時由 API 直接服務（SPA 用 HashRouter，
-    # 不需 history fallback）；API 路由已註冊在前，優先於此 mount。
-    dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    # 前端 build 產物存在時由 API 直接服務（SPA 用 HashRouter，不需 history
+    # fallback）；API 路由已註冊在前，優先於此 mount。monorepo 佈局下 dist
+    # 在 backend/ 的兄弟目錄 frontend/（容器內同樣是 /app/frontend/dist）。
+    dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     if dist.is_dir():
         app.mount("/", StaticFiles(directory=dist, html=True), name="frontend")
     return app

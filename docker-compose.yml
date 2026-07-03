@@ -7,11 +7,11 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       SCHEDULER_ENABLED: "1"
     volumes:
-      - ./data:/app/data
+      - ./backend/data:/app/backend/data
     restart: unless-stopped
 
   db:

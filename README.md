@@ -153,35 +153,38 @@ modules:
 
 ## Project structure
 
+Backend and frontend are fully separated; the root holds only cross-cutting
+orchestration (Docker, compose, CI).
+
 ```
-main.py                  Entry point: launch the Discord bot
-.env                     Secrets and settings (not version-controlled)
-src/
-  config.py              Settings loaded from .env
-  config_report.py       Startup readiness and degraded-feature report
-  crawlers/              arxiv, hackernews, github, reddit, news, twitter, openalex
-  llm/                   groq_client, key_rotator
-  rag/                   embedder, vector_store, chunker, contextual, semantic_cache,
-                         citations, chunk_citations, evaluation, eval_harness,
-                         caching_embedder, pipeline, pdf_ingest, testset_builder,
-                         query_transform, retrievers/ (bm25, hybrid, multi_query,
-                         reranker, parent)
-  graph/                 concept_graph, graph_rag, global_search, router, relationship,
-                         citation_network, visualize
-  agent/                 tool_agent, research_agent, self_rag, deep_research, multi_agent,
-                         corrective_rag, adaptive_rag
-  analysis/              trends, lstm_forecaster
-  recommend/             ranker, reward, personalize, reading_list, subscriptions,
-                         reproducibility, credibility
-  memory/                memory_store
-  notify/                telegram, email, line, dispatcher
-  tools/                 registry, builtins, task_manager, calendar_ics, research_tools,
-                         obsidian_export
-  db/                    database
-  utils/                 logger, file_manager, query_log
-  bot/                   discord_bot
-tests/                   Offline, deterministic test suite (298 tests)
-data/                    Generated indices, metadata, SQLite database
+backend/                 Python backend (run all uv commands from here)
+  main.py                Entry point: `api` (dashboard), `bot` (Discord), or `all`
+  .env                   Secrets and settings (not version-controlled)
+  pyproject.toml         Dependencies (uv)
+  src/
+    config.py            Settings loaded from backend/.env
+    config_report.py     Startup readiness and degraded-feature report
+    api/                 FastAPI dashboard: app, deps, auth, routers/, services/
+    store/               Store abstraction: base, sqlite_faiss, postgres_pgvector
+    scheduler.py         Per-user digest/reminder scheduler (APScheduler)
+    crawlers/            arxiv, hackernews, github, reddit, news, twitter, openalex
+    llm/                 groq_client, key_rotator
+    rag/                 embedder, vector_store, chunker, retrievers/, evaluation, ...
+    graph/               concept_graph, graph_rag, global_search, citation_network, ...
+    agent/               tool_agent, research_agent, deep_research, self_rag, ...
+    analysis/            trends, lstm_forecaster
+    recommend/           ranker, personalize, reading_list, credibility, ...
+    memory/  notify/  tools/  db/  utils/  bot/
+  tests/                 Offline deterministic suite + tests/e2e (Playwright, E2E=1)
+  data/                  Generated indices, metadata, SQLite database
+frontend/                React + Vite + TypeScript + Primer dashboard UI
+  src/pages/             Home, Ask, Conversations, Research, Write, Graph, Library,
+                         Trends, Learning, Analytics, Settings
+  src/components/        Shell, Card, ForceGraph, BarChart, CommandPalette, ...
+  src/lib/  src/i18n/    api/auth/sse clients; EN/ZH translations
+Dockerfile               Multi-stage build: frontend dist baked into the API image
+docker-compose.yml       Single container; optional Postgres via --profile postgres
+.github/workflows/       CI: backend tests (with pgvector), frontend build, docker build
 ```
 
 ## Getting started
@@ -194,9 +197,12 @@ data/                    Generated indices, metadata, SQLite database
 ### Installation
 
 ```bash
+cd backend
 uv sync                     # install dependencies (includes PyTorch; first run is slow)
 cp .env.example .env        # then fill in your keys
-uv run python main.py       # start the bot
+uv run python main.py api   # dashboard API at :8000 (serves frontend/dist if built)
+uv run python main.py bot   # or: the Discord bot
+uv run python main.py all   # or: both at once
 ```
 
 ### Web dashboard
@@ -209,24 +215,24 @@ analytics, and per-user notification scheduling. Design notes live in `docs/ui-d
 Development mode (two processes, Vite proxies `/api` to `:8000`):
 
 ```bash
-uv run uvicorn src.api.app:app --port 8000    # API + Swagger at /docs
+cd backend && uv run python main.py api        # API + Swagger at /docs
 cd frontend && npm install && npm run dev      # UI at http://localhost:5173
 ```
 
 Single-container deployment (the image bakes the frontend build; FastAPI serves it):
 
 ```bash
-docker compose up --build                      # SQLite + FAISS, data in ./data
+docker compose up --build                      # SQLite + FAISS, data in ./backend/data
 docker compose --profile postgres up --build   # optional Postgres + pgvector backend
 ```
 
-For Postgres, set `STORE_BACKEND=postgres` and `DATABASE_URL` in `.env`
-(see `.env.example` for all dashboard variables: JWT, OAuth providers, scheduler).
+For Postgres, set `STORE_BACKEND=postgres` and `DATABASE_URL` in `backend/.env`
+(see `backend/.env.example` for all dashboard variables: JWT, OAuth providers, scheduler).
 
 ## Configuration
 
-Settings live in `.env` (never committed). Required keys are marked; everything else is
-optional and safely skipped when unset.
+Settings live in `backend/.env` (never committed). Required keys are marked; everything else
+is optional and safely skipped when unset.
 
 | Variable | Required | Description |
 | --- | :---: | --- |
@@ -298,6 +304,7 @@ this via a service container), and a Playwright UI smoke suite runs with `E2E=1`
 local dev servers.
 
 ```bash
+cd backend
 uv run pytest                    # 378 passed (postgres/e2e auto-skip locally)
 E2E=1 uv run pytest tests/e2e    # UI smoke, needs both dev servers running
 ```

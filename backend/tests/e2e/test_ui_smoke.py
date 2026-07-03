@@ -1,9 +1,10 @@
 """前端關鍵流程 smoke（Playwright，整合測試）。
 
-需要本機 dev servers 與 E2E=1 才會執行（CI 與一般 pytest 自動 skip）：
+需要本機 dev servers 與 E2E=1 才會執行（CI 與一般 pytest 自動 skip）。
+以下指令都在 backend/ 目錄下：
 
-    uv run uvicorn src.api.app:app --port 8000   # 後端（改過後端要重啟）
-    cd frontend && npm run dev                    # 前端 :5173
+    uv run python main.py api                    # 後端 :8000（改過後端要重啟）
+    cd ../frontend && npm run dev                # 前端 :5173
     E2E=1 uv run pytest tests/e2e -q
 
 流程走真實 API（含 Groq/arXiv 金鑰時的 LLM 生成）；帳號用固定
