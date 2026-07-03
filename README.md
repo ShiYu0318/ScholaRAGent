@@ -2,19 +2,41 @@
 
 # AIR-Agent
 
-**AI Research Agent** — an autonomous research assistant that collects papers and AI news
+**AI Research Agent** — an autonomous research copilot that collects papers and AI news
 from multiple sources, summarizes them with an LLM, answers questions over a vector and
-graph knowledge base, and delivers everything through a Discord bot and multi-platform
-notifications.
+graph knowledge base, and delivers everything through a full-stack web dashboard, a
+Discord bot, and multi-platform notifications.
 
+[![CI](https://github.com/ShiYu0318/AIR-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/AIR-Agent/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-298%20passing-brightgreen.svg)](#testing)
+[![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/api-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
+[![Tests](https://img.shields.io/badge/tests-389%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 [![Package manager: uv](https://img.shields.io/badge/deps-uv-purple.svg)](https://github.com/astral-sh/uv)
+
+<img src=".github/assets/dashboard-home.png" alt="AIR-Agent dashboard overview" width="90%" />
 
 </div>
 
 ---
+
+## Table of contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Web dashboard](#web-dashboard)
+- [RAG design](#rag-design)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Project structure](#project-structure)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [API reference](#api-reference)
+- [Data model](#data-model)
+- [Testing](#testing)
+- [License](#license)
 
 ## Overview
 
@@ -24,22 +46,25 @@ into a concise summary, and builds a searchable knowledge base you can query in 
 language. Retrieval spans both a dense/sparse vector index and a citation/concept graph, so
 the system answers specific questions and reasons about a field as a whole.
 
-A Discord bot delivers a scheduled daily digest and exposes slash commands for
-question-answering, deep research, literature review, multi-paper comparison, trend
-analysis, and writing assistance. User interactions feed a preference reward model that
-continuously tunes recommendation ranking.
+The primary interface is an interactive **web dashboard** (React + FastAPI, GitHub-dark
+aesthetic, EN/ZH bilingual): streaming Q&A with citations, shareable conversations,
+interactive D3 citation/concept graphs, deep-research and writing tools, a reading kanban
+with RSS feeds and exports, trend analytics, learning paths, and per-user notification
+scheduling. A **Discord bot** remains as a secondary interface sharing the same core, with a
+scheduled daily digest and slash commands. User interactions feed a preference reward model
+that continuously tunes recommendation ranking.
 
 The project runs on free, local components where possible: **Groq** (OpenAI-compatible) for
 generation, **sentence-transformers** for local embeddings, and **FAISS** for vector search.
-Heavier options (BGE embeddings and rerankers, HNSW indexing, OpenAlex citation data, PDF
-full-text ingestion) are available behind configuration switches and degrade gracefully when
-their services or models are unavailable.
+Heavier options (BGE embeddings and rerankers, HNSW indexing, Postgres + pgvector, OpenAlex
+citation data, PDF full-text ingestion) are available behind configuration switches and
+degrade gracefully when their services or models are unavailable.
 
 ## Features
 
 ### Collection and summarization
 - **Multi-source collection** — arXiv, AI news (RSS), Hacker News, Reddit, GitHub trending,
-  and X/Twitter.
+  and X/Twitter, plus per-user custom RSS feeds.
 - **LLM summarization** — concise, high-signal summaries and key insights for every item.
 - **PDF full-text ingestion** — parse arXiv PDFs into titled sections (abstract, method,
   results, and so on) so answers draw on full text, not just abstracts.
@@ -72,7 +97,7 @@ their services or models are unavailable.
 - **Self-reflective retrieval** — assess evidence sufficiency and refine before answering.
 - **Corrective retrieval** — fall back to external search when local confidence is low.
 - **Deep research mode** — decompose a topic, research each sub-question, and synthesize a
-  cited review.
+  cited review (streamed live in the dashboard).
 - **Multi-agent pipeline** — Planner, Retriever, Writer, and Critic roles with a revision loop.
 - **Tool-calling agent** — a natural-language agent that calls local tools for search, trend
   analysis, task management, and calendar export.
@@ -84,18 +109,63 @@ their services or models are unavailable.
 - **Guided deep-read** explanations of dense papers.
 - **Credibility and impact signals** from citation counts.
 - **Reproducibility signals** from linked code repositories.
-- **Reading kanban** (to-read / reading / done) and **topic subscriptions**.
+- **Reading kanban** (to-read / reading / done) with drag-and-drop, and **topic subscriptions**.
 - **Obsidian export** — render papers and links as Markdown notes with frontmatter and
-  wikilinks for Obsidian, Juggl, and Dataview.
+  wikilinks for Obsidian, Juggl, and Dataview; CSV and BibTeX exports alongside.
 - **Writing assistance** — LaTeX drafts, slide outlines, polishing, contribution extraction,
-  and submission checklists.
+  review suggestions, and submission checklists.
 
-### Delivery, personalization, and analysis
-- **Multi-platform delivery** — scheduled daily push to Discord, plus Telegram, Email, LINE.
+### Product layer: accounts, delivery, personalization, analytics
+- **Multi-account auth** — email + password (bcrypt, JWT), OAuth sign-in with Google and
+  GitHub, and Discord account linking.
+- **Per-user notification preferences** — frequency (daily/weekly/off), delivery time,
+  timezone, quiet hours, channels (web/Telegram/Email/LINE), and dedupe.
+- **Per-user scheduling** — an APScheduler-based scheduler cron-schedules each user's digest
+  from their preferences and polls due reminders every minute.
+- **Weekly digest + trend detection** — LLM-written weekly overview over the freshest papers,
+  with rising-keyword detection and next-period forecasting.
+- **Contextual reminders** — create, complete, and get notified about research to-dos.
+- **Learning paths and skills** — generate step-by-step study plans per topic (LLM with a
+  retrieval fallback) and track skill levels.
+- **User analytics** — activity timelines, action totals, reading-pipeline counts, and top
+  topics from your interaction history.
 - **Personalized filtering** — rank the daily firehose against a learned interest profile.
 - **Interaction-driven recommendations** — a Bradley-Terry preference reward model learns
   ranking weights from clicks, likes, subscriptions, ratings, and questions.
 - **Trend forecasting** — keyword time-series analysis with an LSTM sliding-window forecaster.
+- **Health monitoring** — store statistics, scheduler status, and provider-key readiness.
+
+## Web dashboard
+
+<div align="center">
+<img src=".github/assets/dashboard-trends.png" alt="Trends page" width="90%" />
+</div>
+
+| Page | What it does |
+| --- | --- |
+| **Overview** | Card wall: today's papers, weekly digest, trends, to-read, recent conversations, reading analytics, system health |
+| **Ask** | Token-streamed Q&A (SSE) over the library with adaptive retrieval and cited sources |
+| **Conversations** | Persistent history with search, rename, delete, and public share links |
+| **Research** | Deep research (live streamed decomposition → synthesis), literature review, comparison, report, BibTeX, guided explain |
+| **Write** | Polish, contribution extraction, review suggestions, checklist, LaTeX draft, slide outline |
+| **Graph** | Interactive D3 citation network (seed expand, click-to-reseed) and concept graph with PageRank and communities; global search; table view fallback |
+| **Library** | Paper list with credibility/reproducibility signals, fetch-today, personalized picks, drag-and-drop reading kanban, RSS feed manager, Obsidian/CSV/BibTeX export |
+| **Trends** | Rising keywords (slope-ranked), per-keyword time series with forecast, top keywords, data-source status |
+| **Learning** | Topic-based learning path generation with checkbox progress; skill levels |
+| **Analytics** | Activity bar chart, action totals, reading pipeline, top topics, library totals |
+| **Settings** | Account and locale, theme, Google/GitHub link status, Discord linking, notification preferences and schedule, reminders, system/provider status |
+
+Design notes:
+
+- **GitHub-dark aesthetic** — built on [Primer React](https://primer.style/) with
+  `ThemeProvider colorMode="night"`: `#0d1117` canvas, `#30363d` borders, `#2f81f7` accent,
+  `#238636` primary buttons, 6px radii, 1px hairlines, compact GitHub-like density. A light
+  ("day") theme is one toggle away. No emoji, no gradients.
+- **Bilingual** — full EN/ZH i18n (react-i18next); locale persists to the user profile.
+- **Streaming** — `/api/ask` and `/api/deepresearch` stream over Server-Sent Events; the
+  client reads `fetch` streams (POST + Authorization header).
+- **Command palette** — press `⌘K` to jump between pages.
+- **Auto docs** — the API self-documents at `/docs` (Swagger UI) and `/redoc` (ReDoc).
 
 ## RAG design
 
@@ -115,25 +185,30 @@ modules:
 ## Architecture
 
 ```
-                        Discord bot (slash commands + daily schedule)
-  user question ->  route by complexity/scope -> retrieve -> generate -> reply (+ sources)
-                          |                          |
-                          |                          +-- vector (FAISS/HNSW) + BM25 fusion
-                          |                          +-- graph (concept / citation network)
-                          |
-  crawlers (arXiv/news/HN/Reddit/GitHub/X) -> LLM summaries -> FAISS + SQLite -> daily push
-                                                                              |-- Discord
-                                                                              |-- Telegram
-                                                                              |-- Email
-                                                                              |-- LINE
+  React + Vite + TS (Primer, EN/ZH)        Discord bot (slash commands + daily schedule)
+        |  JWT / SSE                                     |
+        v                                                v
+  FastAPI (src/api: routers -> services)  <---- shared core (src/): RAG, graph, agents,
+        |                                       research tools, recommend, notify, trends
+        v
+  Store abstraction (src/store)
+        |-- SqliteFaissStore    : SQLite + FAISS (local default)
+        |-- PostgresPgvectorStore: Postgres + pgvector (deployment)
+        |
+  APScheduler (per-user digests + reminders) -> notify dispatcher -> Telegram / Email / LINE
+        ^
+  crawlers (arXiv/news/HN/Reddit/GitHub/X + user RSS) -> LLM summaries -> store + vectors
 ```
 
-- **FAISS** provides semantic retrieval; **SQLite** stores papers and interaction events used
-  by trend analysis and the ranking reward model.
+- The **store abstraction** puts users, papers, interactions, conversations, feeds,
+  preferences, reminders, learning paths, and vectors behind one interface; the same
+  behavior test suite runs against both backends.
+- One **service layer** wraps the core modules for the API; every service has an injection
+  point (`set_*_service`) so endpoint tests run fully offline.
 - Notifications go through a dispatcher that broadcasts only to platforms with configured
   credentials; the rest are skipped automatically.
-- External services (OpenAlex, PDF fetching, BGE models) are wrapped behind thin, injectable
-  interfaces so the system stays testable offline and degrades gracefully.
+- External services (OpenAlex, PDF fetching, BGE models, OAuth providers) are wrapped behind
+  thin, injectable interfaces so the system stays testable offline and degrades gracefully.
 
 ## Tech stack
 
@@ -142,14 +217,18 @@ modules:
 | LLM | Groq (OpenAI-compatible), default `llama-3.3-70b-versatile`; optional multi-key rotation |
 | Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2` default, `BAAI/bge-m3` optional) |
 | Reranker | `BAAI/bge-reranker-v2-m3` cross-encoder (optional) |
-| Vector store | FAISS, exact `IndexFlatIP` or approximate `IndexHNSWFlat` (inner product) |
+| Vector store | FAISS (`IndexFlatIP` / `IndexHNSWFlat`) locally; pgvector on Postgres |
+| Relational store | SQLite (default) or Postgres, behind a store abstraction |
+| API | FastAPI + Uvicorn, SSE streaming, auto Swagger/ReDoc |
+| Auth | bcrypt + PyJWT, OAuth (Google/GitHub), Discord account linking |
+| Scheduling | APScheduler (per-user cron digests, reminder polling) |
+| Frontend | React 19, Vite, TypeScript, Primer React, TanStack Query, react-i18next, D3 |
 | Graph | NetworkX (concept and citation graphs, community detection, PageRank) |
 | Citations | OpenAlex API (arXiv DOI lookup with title-search fallback) |
 | PDF parsing | PyMuPDF |
-| Relational store | SQLite (standard library) |
 | Chat platform | `discord.py` (`app_commands` slash commands + `tasks.loop`) |
 | Forecasting | PyTorch (LSTM) + NumPy |
-| Package manager | `uv` |
+| Package manager / deploy | `uv`; Docker multi-stage build + docker-compose; GitHub Actions CI |
 
 ## Project structure
 
@@ -190,9 +269,9 @@ docker-compose.yml       Single container; optional Postgres via --profile postg
 ## Getting started
 
 ### Prerequisites
-- Python 3.13
-- [`uv`](https://github.com/astral-sh/uv)
-- A Groq API key and a Discord bot token (see [Configuration](#configuration))
+- Python 3.13 and [`uv`](https://github.com/astral-sh/uv)
+- Node.js 22+ (frontend development only)
+- A Groq API key; a Discord bot token if you run the bot (see [Configuration](#configuration))
 
 ### Installation
 
@@ -200,34 +279,37 @@ docker-compose.yml       Single container; optional Postgres via --profile postg
 cd backend
 uv sync                     # install dependencies (includes PyTorch; first run is slow)
 cp .env.example .env        # then fill in your keys
+
 uv run python main.py api   # dashboard API at :8000 (serves frontend/dist if built)
 uv run python main.py bot   # or: the Discord bot
 uv run python main.py all   # or: both at once
 ```
 
-### Web dashboard
+`uv run` uses the project virtualenv automatically. If you prefer an activated shell:
 
-A full-stack dashboard (FastAPI + React/Vite/TypeScript + Primer, EN/ZH) covers streaming
-Q&A with citations, conversations and sharing, interactive D3 citation/concept graphs, deep
-research, writing tools, a reading kanban with RSS feeds and exports, trends, learning paths,
-analytics, and per-user notification scheduling. Design notes live in `docs/ui-dashboard-plan.md`.
+```bash
+source backend/.venv/bin/activate   # then run: python main.py api
+```
 
-Development mode (two processes, Vite proxies `/api` to `:8000`):
+### Frontend development
+
+Two processes; Vite proxies `/api` to `:8000` with hot reload:
 
 ```bash
 cd backend && uv run python main.py api        # API + Swagger at /docs
 cd frontend && npm install && npm run dev      # UI at http://localhost:5173
 ```
 
-Single-container deployment (the image bakes the frontend build; FastAPI serves it):
+### Docker deployment
+
+Single container — the image bakes the frontend build and FastAPI serves it:
 
 ```bash
 docker compose up --build                      # SQLite + FAISS, data in ./backend/data
 docker compose --profile postgres up --build   # optional Postgres + pgvector backend
 ```
 
-For Postgres, set `STORE_BACKEND=postgres` and `DATABASE_URL` in `backend/.env`
-(see `backend/.env.example` for all dashboard variables: JWT, OAuth providers, scheduler).
+For Postgres, set `STORE_BACKEND=postgres` and `DATABASE_URL` in `backend/.env`.
 
 ## Configuration
 
@@ -238,8 +320,8 @@ is optional and safely skipped when unset.
 | --- | :---: | --- |
 | `GROQ_API_KEY` | yes | Groq API key ([console.groq.com](https://console.groq.com)) |
 | `GROQ_MODEL` | | Model id (default `llama-3.3-70b-versatile`) |
-| `DISCORD_BOT_TOKEN` | yes | Discord bot token |
-| `DISCORD_CHANNEL_ID` | yes | Channel id for the daily push |
+| `DISCORD_BOT_TOKEN` | bot | Discord bot token (required only for the bot) |
+| `DISCORD_CHANNEL_ID` | bot | Channel id for the daily push |
 | `DISCORD_GUILD_ID` | | Guild id for instant slash-command sync (else global sync) |
 | `ARXIV_QUERY` | | arXiv query (default `cat:cs.AI`) |
 | `DAILY_COUNT` / `REPORT_COUNT` | | Papers fetched per daily push / per report |
@@ -253,14 +335,16 @@ is optional and safely skipped when unset.
 | `GITHUB_TOKEN` | | Optional, raises GitHub API rate limits |
 | `X_BEARER_TOKEN` | | Enables the X/Twitter crawler (X API v2 requires a paid plan) |
 | `JWT_SECRET` | | Dashboard auth secret (ephemeral if unset; set it in production) |
+| `JWT_EXPIRE_MINUTES` | | Token lifetime (default 7 days) |
+| `CORS_ORIGINS` / `API_PUBLIC_URL` / `FRONTEND_URL` | | Dashboard URLs (defaults fit local dev) |
 | `GOOGLE/GITHUB/DISCORD_CLIENT_ID/SECRET` | | OAuth sign-in and Discord account linking |
 | `STORE_BACKEND` / `DATABASE_URL` | | `sqlite` (default) or `postgres` with pgvector |
 | `SCHEDULER_ENABLED` | | Per-user digest/reminder scheduler (compose sets it to 1) |
 
 The arXiv, news, Hacker News, Reddit, and GitHub crawlers work without credentials.
-Telegram/Email/LINE delivery and the X/Twitter crawler activate only once their keys are set.
-Changing `EMBED_MODEL` changes vector dimension; the store detects this and rebuilds the index
-automatically.
+Telegram/Email/LINE delivery, OAuth providers, and the X/Twitter crawler activate only once
+their keys are set. Changing `EMBED_MODEL` changes vector dimension; the store detects this
+and rebuilds the index automatically.
 
 ### Setting up the Discord bot
 1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications).
@@ -271,6 +355,12 @@ automatically.
 4. Enable Developer Mode in Discord to copy the channel and guild IDs.
 
 ## Usage
+
+Open http://localhost:5173 (dev) or http://localhost:8000 (Docker), create an account (or
+sign in with Google/GitHub), fetch today's papers from **Library -> Fetch today**, then ask
+questions from **Ask**. Interactive API docs live at http://localhost:8000/docs.
+
+### Discord bot commands
 
 | Command | Description |
 | --- | --- |
@@ -295,6 +385,142 @@ automatically.
 The daily digest runs automatically at the configured time and is broadcast to every
 configured platform.
 
+## API reference
+
+All endpoints are also browsable live at `/docs` (Swagger UI) and `/redoc`. Unless marked
+**public**, endpoints require `Authorization: Bearer <JWT>` obtained from register/login or
+OAuth. Streaming endpoints return Server-Sent Events (`data: {json}\n\n` frames).
+
+### Auth (`/auth`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/auth/register` | Create an account (email + password), returns `{token, user}` — public |
+| POST | `/auth/login` | Sign in, returns `{token, user}` — public |
+| GET | `/auth/me` | Current user profile |
+| PATCH | `/auth/me` | Update `display_name`, `locale`, or password |
+| GET | `/auth/providers` | Which OAuth providers are configured — public |
+| GET | `/auth/oauth/{provider}` | Start Google/GitHub OAuth sign-in (302) — public |
+| GET | `/auth/oauth/{provider}/callback` | OAuth callback; redirects to the frontend with a token — public |
+| POST | `/auth/discord/link` | Get the Discord account-linking URL |
+| DELETE | `/auth/discord/link` | Unlink the Discord account |
+
+### Q&A and conversations (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/api/ask` | **SSE** — streamed answer over the library; events: `conversation`, `token`, `citations`, `done` |
+| GET | `/api/conversations` | List conversations (`?query=` searches titles and messages) |
+| GET | `/api/conversations/{id}` | One conversation with messages and citations |
+| PATCH | `/api/conversations/{id}` | Rename |
+| DELETE | `/api/conversations/{id}` | Delete (204) |
+| POST | `/api/conversations/{id}/share` | Create a public share link, returns `{token, url}` |
+| GET | `/api/shared/{token}` | Read a shared conversation — public |
+
+### Papers and library (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/papers` | List papers (`?limit=&source=&query=`) with reproducibility signals |
+| GET | `/api/paper/{id}` | Paper detail with credibility (OpenAlex) and reproducibility |
+| POST | `/api/daily` | Fetch today's arXiv papers, store and index them |
+| GET | `/api/daily/personalized` | Papers ranked against your interaction profile |
+| POST | `/api/interactions` | Log an interaction (`like`, `click`, ...) for recommendations (201) |
+| GET | `/api/reading` | Reading kanban items (`?state=to-read\|reading\|done`) |
+| POST | `/api/reading` | Add a paper to the kanban (201) |
+| PATCH | `/api/reading/{paper_id}` | Move between states |
+| DELETE | `/api/reading/{paper_id}` | Remove from the kanban (204) |
+| GET | `/api/export/csv` | Export the library as CSV |
+| GET | `/api/export/bibtex` | Export as BibTeX |
+| GET | `/api/export/obsidian` | Export as an Obsidian-ready Markdown zip |
+
+### Feeds and subscriptions (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/feeds` | Your RSS feeds |
+| POST | `/api/feeds` | Add a feed (201; 409 on duplicate) |
+| PATCH | `/api/feeds/{id}` | Update title/category/enabled |
+| DELETE | `/api/feeds/{id}` | Remove a feed (204) |
+| POST | `/api/feeds/refresh` | Fetch all enabled feeds into the library |
+| GET | `/api/subscriptions` | Your keyword subscriptions |
+| POST | `/api/subscriptions` | Add a keyword subscription (201) |
+| DELETE | `/api/subscriptions/{name}` | Remove one (204) |
+
+### Graph (`/api/graph`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/graph/citation?seed=` | Citation network around a seed (arXiv id or title), D3 nodes/edges + PageRank + communities |
+| GET | `/api/graph/concept` | Concept graph over the library (`?refresh=1` rebuilds) |
+| GET | `/api/graph/global?query=` | Community-summary map-reduce answer for corpus-level questions |
+
+### Research and writing (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/api/deepresearch` | **SSE** — decompose → per-question research → synthesis; events: `decompose`, `section`, `synthesis`, `citations`, `done` |
+| POST | `/api/litreview` | Literature review over retrieved papers |
+| POST | `/api/compare` | Multi-paper method comparison table |
+| POST | `/api/report` | Structured topic report with citations |
+| POST | `/api/bibtex` | BibTeX for retrieved papers |
+| POST | `/api/explain` | Guided plain-language deep-read of one paper |
+| POST | `/api/write/{tool}` | Writing tools: `polish`, `contributions`, `review`, `checklist`, `latex`, `slides` |
+
+### Insights (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/trends` | Rising keywords (slope-ranked) + top keywords (`?granularity=month\|year&top=`) |
+| GET | `/api/trends/{keyword}` | One keyword's time series and next-period forecast |
+| GET | `/api/digest/weekly` | Weekly digest: top recent papers, keywords, LLM overview |
+| GET | `/api/analytics` | Your activity, action totals, reading pipeline, top topics (`?days=`) |
+
+### Notifications, reminders, learning (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/notifications/preferences` | Your notification preferences |
+| PUT | `/api/notifications/preferences` | Update them; the scheduler reschedules immediately |
+| GET | `/api/reminders` | Open reminders (`?include_done=true` for all) |
+| POST | `/api/reminders` | Create a reminder (201) |
+| POST | `/api/reminders/{id}/complete` | Mark done |
+| DELETE | `/api/reminders/{id}` | Delete (204) |
+| GET | `/api/learning-paths` | Your learning paths |
+| POST | `/api/learning-paths` | Generate a path for a topic (LLM, retrieval fallback) (201) |
+| PATCH | `/api/learning-paths/{id}` | Update items/progress/topic |
+| DELETE | `/api/learning-paths/{id}` | Delete (204) |
+| GET | `/api/skills` | Your skill levels |
+| PUT | `/api/skills` | Set a skill level (0-100) |
+
+### System and extras (`/api`)
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/health` | Store stats, scheduler status, provider-key readiness (booleans only) — public |
+| GET | `/api/sources` | Data-source configuration status |
+| GET | `/api/memory` | Your agent memory items (`?kind=&contains=&limit=`) |
+| POST | `/api/memory` | Add a memory item (201) |
+| POST | `/api/eval` | RAG evaluation metrics: precision@k, recall, MRR, optional faithfulness |
+| POST | `/api/agent` | Tool-calling agent (503 without `GROQ_API_KEY`) |
+
+## Data model
+
+One schema across both store backends (SQLite and Postgres):
+
+| Table | Purpose |
+| --- | --- |
+| `users` | Accounts: email, password hash, OAuth ids (Google/GitHub/Discord), display name, locale |
+| `papers` | Shared paper library: title, abstract, authors, link, published, summary, source |
+| `interactions` | Per-user actions on papers (like/click/ask...), feeds ranking and analytics |
+| `conversations` / `messages` | Persistent chat history with citations and share tokens |
+| `feeds` / `user_subscriptions` | Per-user RSS sources and keyword subscriptions |
+| `reading_list` | Kanban items (to-read/reading/done) with tags and notes |
+| `notification_preferences` | Frequency, time, timezone, quiet hours, channels, dedupe |
+| `reminders` | Due-dated to-dos polled by the scheduler |
+| `learning_paths` / `user_skills` | Study plans with progress; skill levels |
+| `paper_embeddings` | (Postgres) pgvector embeddings; FAISS index files locally |
+
 ## Testing
 
 The full suite is offline and deterministic. It uses a fake embedder, stubbed LLM and network
@@ -309,6 +535,9 @@ uv run pytest                    # 378 passed (postgres/e2e auto-skip locally)
 E2E=1 uv run pytest tests/e2e    # UI smoke, needs both dev servers running
 ```
 
+CI runs the backend suite against a real pgvector service container (389 tests), type-checks
+and builds the frontend, and validates the Docker image build on `main`.
+
 ## License
 
-Released under the [MIT License](LICENSE).
+MIT — see [LICENSE](LICENSE).
