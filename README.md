@@ -2,19 +2,21 @@
 
 # ScholaRAGent
 
-**ScholaRAGent** is a full-stack open-source platform for agentic AI research assistance via
-multi-paradigm RAG: it collects papers and news from many sources, answers questions with
-streaming cited retrieval and GraphRAG knowledge graphs, runs deep-research agents and
-writing tools, and delivers personalized digests, trends, and analytics through a bilingual
-web dashboard and Discord bot — one Docker container, SQLite+FAISS or Postgres+pgvector.
+**A self-hosted research copilot that turns the daily firehose of AI papers into a queryable,
+citable knowledge base.**
+
+Multi-source ingestion, hybrid retrieval over a vector index and a knowledge graph,
+agentic deep research, and personalized delivery — in one Docker container,
+with no managed services required.
 
 [![CI](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-403%20passing-brightgreen.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/api-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-389%20passing-brightgreen.svg)](#testing)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Package manager: uv](https://img.shields.io/badge/deps-uv-purple.svg)](https://github.com/astral-sh/uv)
+
+[Quick start](#quick-start) · [Architecture](#architecture) · [How retrieval works](#how-retrieval-works) · [API](#api-reference) · [Contributing](#contributing)
 
 </div>
 
@@ -23,433 +25,538 @@ web dashboard and Discord bot — one Docker container, SQLite+FAISS or Postgres
 ## Table of contents
 
 - [Overview](#overview)
+- [Quick start](#quick-start)
+- [Architecture](#architecture)
+- [How retrieval works](#how-retrieval-works)
+- [Knowledge graph](#knowledge-graph)
+- [Agentic workflows](#agentic-workflows)
+- [Evaluation](#evaluation)
 - [Features](#features)
 - [Web dashboard](#web-dashboard)
-- [RAG design](#rag-design)
-- [Architecture](#architecture)
-- [Tech stack](#tech-stack)
-- [Project structure](#project-structure)
-- [Quick start](#quick-start)
-- [Configuration](#configuration)
-- [Usage](#usage)
+- [Discord bot](#discord-bot)
 - [API reference](#api-reference)
-- [Database schema](#database-schema)
+- [Data model](#data-model)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Project structure](#project-structure)
 - [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
+- [Acknowledgements](#acknowledgements)
 
 ## Overview
 
-ScholaRAGent keeps you on top of fast-moving AI research without the daily manual grind. It
-gathers the latest papers and community discussion from many sources, distills each item
-into a concise summary, and builds a searchable knowledge base you can query in natural
-language. Retrieval spans both a dense/sparse vector index and a citation/concept graph, so
-the system answers specific questions and reasons about a field as a whole.
+### The problem
 
-The primary interface is an interactive **web dashboard** (React + FastAPI, GitHub-dark
-aesthetic, EN/ZH bilingual): streaming Q&A with citations, shareable conversations,
-interactive D3 citation/concept graphs, deep-research and writing tools, a reading kanban
-with RSS feeds and exports, trend analytics, learning paths, and per-user notification
-scheduling. A **Discord bot** remains as a secondary interface sharing the same core, with a
-scheduled daily digest and slash commands. User interactions feed a preference reward model
-that continuously tunes recommendation ranking.
+Staying current in a fast-moving research field is a daily tax. Relevant work is scattered
+across arXiv, conference proceedings, community discussion, and code repositories. Reading
+everything is impossible; reading nothing means missing the paper that mattered. And once
+you have read something, the knowledge is stranded — in a PDF folder, a bookmark bar, or a
+note-taking app that cannot answer questions.
 
-The project runs on free, local components where possible: **Groq** (OpenAI-compatible) for
-generation, **sentence-transformers** for local embeddings, and **FAISS** for vector search.
-Heavier options (BGE embeddings and rerankers, HNSW indexing, Postgres + pgvector, OpenAlex
-citation data, PDF full-text ingestion) are available behind configuration switches and
-degrade gracefully when their services or models are unavailable.
+### What ScholaRAGent does
 
-## Features
+ScholaRAGent continuously collects research artifacts from multiple sources, summarizes each
+one, and indexes it into a knowledge base you can query in natural language. Answers stream
+back with citations that resolve to a specific paper, section, and link — so every claim is
+checkable.
 
-### Collection and summarization
-- **Multi-source collection** — arXiv, AI news (RSS), Hacker News, Reddit, GitHub trending,
-  and X/Twitter, plus per-user custom RSS feeds.
-- **LLM summarization** — concise, high-signal summaries and key insights for every item.
-- **PDF full-text ingestion** — parse arXiv PDFs into titled sections (abstract, method,
-  results, and so on) so answers draw on full text, not just abstracts.
+Retrieval spans two complementary representations of the same corpus:
 
-### Retrieval and question-answering
-- **Hybrid retrieval** — dense vector search (FAISS, optional HNSW) fused with BM25 lexical
-  search via Reciprocal Rank Fusion.
-- **Query transformation** — HyDE, multi-query rewriting, and question decomposition to widen
-  recall.
-- **Cross-encoder reranking** — optional BGE reranker for second-stage precision.
-- **Parent-document retrieval** — retrieve focused child chunks, return their parent papers.
-- **Contextual chunk embedding** — situate each chunk within its document before embedding.
-- **Semantic answer cache** — short-circuit near-duplicate questions.
-- **Traceable citations** — chunk-level source markers resolve back to paper, section, and
-  link, with a citation-accuracy metric to score grounding.
+- a **vector and lexical index** for finding specific passages, and
+- a **knowledge graph** of concepts and citations for reasoning about a field as a whole.
 
-### Graph knowledge base
-- **Concept graph** — extract method/dataset/task/metric relations into a directed graph.
-- **Community detection and summaries** — cluster the graph into research sub-fields.
-- **Citation network** — expand a seed paper into prior (references) and derivative (citing)
-  works via OpenAlex, ranked by PageRank influence.
-- **Graph retrieval and global search** — neighborhood expansion for specific questions;
-  community-report map-reduce for field-level questions.
-- **Query routing and adaptive retrieval** — route each question to local or global search
-  and choose no-retrieval, single-shot, or multi-step strategies by complexity.
+On top of that sit agentic workflows — multi-step research decomposition, self-reflective
+retrieval, and a multi-agent write-and-critique loop — plus a product layer that handles
+accounts, personalized ranking, scheduled digests, and analytics.
 
-### Reasoning and agents
-- **Iterative retrieval agent** — multi-round retrieve-and-decide loops for multi-hop
-  questions.
-- **Self-reflective retrieval** — assess evidence sufficiency and refine before answering.
-- **Corrective retrieval** — fall back to external search when local confidence is low.
-- **Deep research mode** — decompose a topic, research each sub-question, and synthesize a
-  cited review (streamed live in the dashboard).
-- **Multi-agent pipeline** — Planner, Retriever, Writer, and Critic roles with a revision loop.
-- **Tool-calling agent** — a natural-language agent that calls local tools for search, trend
-  analysis, task management, and calendar export.
+### Design principles
 
-### Research workflow tools
-- **Literature review** generation with identified research gaps.
-- **BibTeX export** with generated citation keys.
-- **Method comparison tables** across papers.
-- **Guided deep-read** explanations of dense papers.
-- **Credibility and impact signals** from citation counts.
-- **Reproducibility signals** from linked code repositories.
-- **Reading kanban** (to-read / reading / done) with drag-and-drop, and **topic subscriptions**.
-- **Obsidian export** — render papers and links as Markdown notes with frontmatter and
-  wikilinks for Obsidian, Juggl, and Dataview; CSV and BibTeX exports alongside.
-- **Writing assistance** — LaTeX drafts, slide outlines, polishing, contribution extraction,
-  review suggestions, and submission checklists.
-
-### Product layer: accounts, delivery, personalization, analytics
-- **Multi-account auth** — email + password (bcrypt, JWT), OAuth sign-in with Google and
-  GitHub, and Discord account linking.
-- **Per-user notification preferences** — frequency (daily/weekly/off), delivery time,
-  timezone, quiet hours, channels (web/Telegram/Email/LINE), and dedupe.
-- **Per-user scheduling** — an APScheduler-based scheduler cron-schedules each user's digest
-  from their preferences and polls due reminders every minute.
-- **Weekly digest + trend detection** — LLM-written weekly overview over the freshest papers,
-  with rising-keyword detection and next-period forecasting.
-- **Contextual reminders** — create, complete, and get notified about research to-dos.
-- **Learning paths and skills** — generate step-by-step study plans per topic (LLM with a
-  retrieval fallback) and track skill levels.
-- **User analytics** — activity timelines, action totals, reading-pipeline counts, and top
-  topics from your interaction history.
-- **Personalized filtering** — rank the daily firehose against a learned interest profile.
-- **Interaction-driven recommendations** — a Bradley-Terry preference reward model learns
-  ranking weights from clicks, likes, subscriptions, ratings, and questions.
-- **Trend forecasting** — keyword time-series analysis with an LSTM sliding-window forecaster.
-- **Health monitoring** — store statistics, scheduler status, and provider-key readiness.
-
-## Web dashboard
-
-| Page | What it does |
+| Principle | How it shows up |
 | --- | --- |
-| **Overview** | Card wall: today's papers, weekly digest, trends, to-read, recent conversations, reading analytics, system health |
-| **Ask** | Token-streamed Q&A (SSE) over the library with adaptive retrieval and cited sources |
-| **Conversations** | Persistent history with search, rename, delete, and public share links |
-| **Research** | Deep research (live streamed decomposition → synthesis), literature review, comparison, report, BibTeX, guided explain |
-| **Write** | Polish, contribution extraction, review suggestions, checklist, LaTeX draft, slide outline |
-| **Graph** | Interactive D3 citation network (seed expand, click-to-reseed) and concept graph with PageRank and communities; global search; table view fallback |
-| **Library** | Paper list with credibility/reproducibility signals, fetch-today, personalized picks, drag-and-drop reading kanban, RSS feed manager, Obsidian/CSV/BibTeX export |
-| **Trends** | Rising keywords (slope-ranked), per-keyword time series with forecast, top keywords, data-source status |
-| **Learning** | Topic-based learning path generation with checkbox progress; skill levels |
-| **Analytics** | Activity bar chart, action totals, reading pipeline, top topics, library totals |
-| **Settings** | Account and locale, theme, Google/GitHub link status, Discord linking, notification preferences and schedule, reminders, system/provider status |
-
-Design notes:
-
-- **GitHub-dark aesthetic** — built on [Primer React](https://primer.style/) with
-  `ThemeProvider colorMode="night"`: `#0d1117` canvas, `#30363d` borders, `#2f81f7` accent,
-  `#238636` primary buttons, 6px radii, 1px hairlines, compact GitHub-like density. A light
-  ("day") theme is one toggle away. No emoji, no gradients.
-- **Bilingual** — full EN/ZH i18n (react-i18next); locale persists to the user profile.
-- **Streaming** — `/api/ask` and `/api/deepresearch` stream over Server-Sent Events; the
-  client reads `fetch` streams (POST + Authorization header).
-- **Command palette** — press `⌘K` to jump between pages.
-- **Auto docs** — the API self-documents at `/docs` (Swagger UI) and `/redoc` (ReDoc).
-
-## RAG design
-
-ScholaRAGent implements the major retrieval-augmented generation paradigms as composable
-modules:
-
-| Paradigm | Where |
-| --- | --- |
-| Advanced RAG | hybrid retrieval, query transformation, reranking, parent-document, contextual chunking, caching, traceable citations |
-| Modular RAG | `RAGPipeline` composes retrieve/rerank/generate stages into configurable flows |
-| GraphRAG | concept graph, community detection, citation network, graph and global search |
-| Corrective RAG | external fallback on low retrieval confidence |
-| Self-RAG | sufficiency reflection before answering |
-| Adaptive RAG | complexity-aware retrieval-depth selection |
-| Agentic RAG | iterative retrieval, deep research, multi-agent pipeline |
-
-Evaluation runs on two tracks: deterministic offline metrics (precision@k, recall, MRR,
-lexical faithfulness, citation accuracy) for CI-safe regression, and **RAGAS-style
-LLM-as-judge metrics** (claim-level faithfulness, answer relevancy, context
-precision/recall) implemented natively on the Groq client — no `ragas`/langchain
-dependency. `compare_pipelines` scores multiple RAG configurations on a shared golden
-dataset for paradigm-comparison experiments.
-
-## Architecture
-
-```
-  React + Vite + TS (Primer, EN/ZH)        Discord bot (slash commands + daily schedule)
-        |  JWT / SSE                                     |
-        v                                                v
-  FastAPI (src/api: routers -> services)  <---- shared core (src/): RAG, graph, agents,
-        |                                       research tools, recommend, notify, trends
-        v
-  Store abstraction (src/store)
-        |-- SqliteFaissStore    : SQLite + FAISS (local default)
-        |-- PostgresPgvectorStore: Postgres + pgvector (deployment)
-        |
-  APScheduler (per-user digests + reminders) -> notify dispatcher -> Telegram / Email / LINE
-        ^
-  crawlers (arXiv/news/HN/Reddit/GitHub/X + user RSS) -> LLM summaries -> store + vectors
-```
-
-- The **store abstraction** puts users, papers, interactions, conversations, feeds,
-  preferences, reminders, learning paths, and vectors behind one interface; the same
-  behavior test suite runs against both backends.
-- One **service layer** wraps the core modules for the API; every service has an injection
-  point (`set_*_service`) so endpoint tests run fully offline.
-- Notifications go through a dispatcher that broadcasts only to platforms with configured
-  credentials; the rest are skipped automatically.
-- External services (OpenAlex, PDF fetching, BGE models, OAuth providers) are wrapped behind
-  thin, injectable interfaces so the system stays testable offline and degrades gracefully.
-
-## Tech stack
-
-| Concern | Choice |
-| --- | --- |
-| LLM | Groq (OpenAI-compatible), default `llama-3.3-70b-versatile`; optional multi-key rotation |
-| Embeddings | `sentence-transformers` (`all-MiniLM-L6-v2` default, `BAAI/bge-m3` optional) |
-| Reranker | `BAAI/bge-reranker-v2-m3` cross-encoder (optional) |
-| Vector store | FAISS (`IndexFlatIP` / `IndexHNSWFlat`) locally; pgvector on Postgres |
-| Relational store | SQLite (default) or Postgres, behind a store abstraction |
-| API | FastAPI + Uvicorn, SSE streaming, auto Swagger/ReDoc |
-| Auth | bcrypt + PyJWT, OAuth (Google/GitHub), Discord account linking |
-| Scheduling | APScheduler (per-user cron digests, reminder polling) |
-| Frontend | React 19, Vite, TypeScript, Primer React, TanStack Query, react-i18next, D3 |
-| Graph | NetworkX (concept and citation graphs, community detection, PageRank) |
-| Citations | OpenAlex API (arXiv DOI lookup with title-search fallback) |
-| PDF parsing | PyMuPDF |
-| Chat platform | `discord.py` (`app_commands` slash commands + `tasks.loop`) |
-| Forecasting | PyTorch (LSTM) + NumPy |
-| Package manager / deploy | `uv`; Docker multi-stage build + docker-compose; GitHub Actions CI |
-
-## Project structure
-
-Backend and frontend are fully separated; the root holds only cross-cutting
-orchestration (Docker, compose, CI).
-
-```
-backend/                 Python backend (run all uv commands from here)
-  main.py                Entry point: `api` (dashboard), `bot` (Discord), or `all`
-  .env                   Secrets and settings (not version-controlled)
-  pyproject.toml         Dependencies (uv)
-  src/
-    config.py            Settings loaded from backend/.env
-    config_report.py     Startup readiness and degraded-feature report
-    api/                 FastAPI dashboard: app, deps, auth, routers/, services/
-    store/               Store abstraction: base, sqlite_faiss, postgres_pgvector
-    scheduler.py         Per-user digest/reminder scheduler (APScheduler)
-    crawlers/            arxiv, hackernews, github, reddit, news, twitter, openalex
-    llm/                 groq_client, key_rotator
-    rag/                 embedder, vector_store, chunker, retrievers/, evaluation, ...
-    graph/               concept_graph, graph_rag, global_search, citation_network, ...
-    agent/               tool_agent, research_agent, deep_research, self_rag, ...
-    analysis/            trends, lstm_forecaster
-    recommend/           ranker, personalize, reading_list, credibility, ...
-    memory/  notify/  tools/  db/  utils/  bot/
-  tests/                 Offline deterministic suite + tests/e2e (Playwright, E2E=1)
-  data/                  Generated indices, metadata, SQLite database
-frontend/                React + Vite + TypeScript + Primer dashboard UI
-  src/pages/             Home, Ask, Conversations, Research, Write, Graph, Library,
-                         Trends, Learning, Analytics, Settings
-  src/components/        Shell, Card, ForceGraph, BarChart, CommandPalette, ...
-  src/lib/  src/i18n/    api/auth/sse clients; EN/ZH translations
-Dockerfile               Multi-stage build: frontend dist baked into the API image
-docker-compose.yml       Single container; optional Postgres via --profile postgres
-.github/workflows/       CI: backend tests (with pgvector), frontend build, docker build
-```
+| **Runs on free, local components** | Local sentence-transformers embeddings, local FAISS index, SQLite. The only required credential is a Groq API key (free tier is sufficient). |
+| **Degrade, never crash** | Every optional capability — reranking, OAuth, PDF ingestion, OpenAlex citations, Telegram/Email/LINE delivery — is detected at startup and skipped when unconfigured. |
+| **One persistence boundary** | A single `Store` interface covers relational data and vector search, so the same code runs on SQLite+FAISS locally and Postgres+pgvector in deployment. |
+| **Testable without the internet** | Every external dependency sits behind an injectable interface. The full suite runs offline with no model downloads and no credentials. |
+| **LLM-optional control flow** | Routing and classification prefer an LLM but fall back to deterministic heuristics, so the system stays functional and testable without one. |
 
 ## Quick start
 
 ### Prerequisites
 
-1. Groq API key — https://console.groq.com (free tier works)
-2. Python 3.13 + [`uv`](https://github.com/astral-sh/uv), or Docker
-3. Discord bot token (optional, only for the bot) — https://discord.com/developers/applications
-4. Node.js 22+ (optional, only for frontend development)
+| Requirement | Needed for |
+| --- | --- |
+| [Groq API key](https://console.groq.com) | Generation, summarization, LLM routing (free tier works) |
+| Docker, or Python 3.13 + [`uv`](https://github.com/astral-sh/uv) | Running the stack |
+| Node.js 22+ | Frontend development only |
+| [Discord bot token](https://discord.com/developers/applications) | The Discord interface only |
 
-### Option 1: Docker Compose (recommended)
+### Option 1 — Docker Compose
 
-Single container — the image bakes the frontend build and FastAPI serves it:
+The image bakes the frontend build into the API container, so one service serves both.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/ShiYu0318/ScholaRAGent.git
 cd ScholaRAGent
 
-# 2. Set up environment variables
 cp backend/.env.example backend/.env
-# Edit backend/.env with your keys (GROQ_API_KEY at minimum)
+# Set GROQ_API_KEY at minimum
 
-# 3. Start
 docker compose up --build                      # SQLite + FAISS, data in ./backend/data
-docker compose --profile postgres up --build   # optional Postgres + pgvector backend
-
-# 4. Access the application
-# Web + API:  http://localhost:8000
-# API docs:   http://localhost:8000/docs
+docker compose --profile postgres up --build   # Postgres + pgvector instead
 ```
 
-For Postgres, also set `STORE_BACKEND=postgres` and `DATABASE_URL` in `backend/.env`.
+Web UI and API: `http://localhost:8000` · Interactive API docs: `http://localhost:8000/docs`
 
-### Option 2: Local development
+For the Postgres profile, also set `STORE_BACKEND=postgres` and `DATABASE_URL` in
+`backend/.env`.
+
+### Option 2 — Local development
 
 ```bash
-# Backend (dashboard API)
+# Backend — all uv commands run from backend/
 cd backend
-uv sync                     # install dependencies (includes PyTorch; first run is slow)
+uv sync                     # first run pulls PyTorch and is slow
 cp .env.example .env        # then fill in your keys
-uv run python main.py api   # dashboard API at :8000 (serves frontend/dist if built)
-uv run python main.py bot   # or: the Discord bot
-uv run python main.py all   # or: both at once
+uv run python main.py api   # API at :8000, serves frontend/dist when present
+uv run python main.py bot   # Discord bot instead
+uv run python main.py all   # both
 
-# Frontend (in another terminal, hot reload; Vite proxies /api to :8000)
+# Frontend — separate terminal, hot reload, proxies /api to :8000
 cd frontend
 npm install
-npm run dev                 # UI at http://localhost:5173
-```
-
-`uv run` uses the project virtualenv automatically. If you prefer an activated shell:
-
-```bash
-source backend/.venv/bin/activate   # then run: python main.py api
+npm run dev                 # http://localhost:5173
 ```
 
 ### First steps
 
-1. Open http://localhost:5173 (dev) or http://localhost:8000 (Docker) and create an
-   account — or sign in with Google/GitHub if OAuth keys are configured.
-2. Fetch papers: **Library -> Fetch today** pulls and indexes the latest arXiv batch.
-3. Ask a question from **Ask** — answers stream in with cited sources.
-4. Explore: expand a citation graph in **Graph**, add RSS feeds in **Library -> Feeds**,
-   set your digest schedule in **Settings**, and watch **Trends** fill up as the library
-   grows.
+1. Open the dashboard and create an account (or use Google/GitHub if OAuth is configured).
+2. **Library -> Fetch today** pulls and indexes the latest arXiv batch.
+3. Ask a question from **Ask** — the answer streams in with cited sources.
+4. From there: expand a citation graph in **Graph**, add RSS sources in **Library -> Feeds**,
+   set a digest schedule in **Settings**, and watch **Trends** populate as the corpus grows.
 
-## Configuration
+## Architecture
 
-Settings live in `backend/.env` (never committed). The minimum working configuration:
+Three interfaces share one core. The API layer is thin — routers handle HTTP concerns and
+delegate to services, which compose the domain modules under `src/`.
 
-```bash
-# Required — dashboard
-GROQ_API_KEY=your-groq-api-key
+```mermaid
+flowchart TB
+    subgraph clients["Interfaces"]
+        WEB["Web dashboard<br/>React 19 + Vite + Primer"]
+        BOT["Discord bot<br/>17 slash commands"]
+        REST["REST / SSE clients"]
+    end
 
-# Recommended in production
-JWT_SECRET=your-secret-key          # openssl rand -hex 32; ephemeral if unset
+    subgraph apilayer["API layer — FastAPI"]
+        ROUTERS["Routers<br/>auth · ask · conversations · graph · research<br/>write · library · feeds · insights · notifications<br/>reminders · learning · health · extras"]
+        SERVICES["Services<br/>ask · graph · library · research · product"]
+    end
 
-# Required only for the Discord bot
-DISCORD_BOT_TOKEN=your-bot-token
-DISCORD_CHANNEL_ID=your-channel-id
+    subgraph core["Domain core"]
+        RAG["rag/<br/>retrievers · chunking<br/>caching · evaluation"]
+        GRAPH["graph/<br/>concept · citation<br/>community · routing"]
+        AGENT["agent/<br/>adaptive · self · corrective<br/>deep research · multi-agent"]
+        REC["recommend/<br/>ranking · reward model<br/>personalization"]
+        CRAWL["crawlers/<br/>arXiv · news · HN<br/>Reddit · GitHub · OpenAlex"]
+        NOTIFY["notify/<br/>Telegram · Email · LINE"]
+    end
 
-# Deployment switches
-SCHEDULER_ENABLED=1                 # per-user digests and reminders (compose sets this)
-STORE_BACKEND=sqlite                # or postgres (+ DATABASE_URL)
+    subgraph persistence["Store abstraction"]
+        SQLITE[("SqliteFaissStore<br/>SQLite + FAISS")]
+        PG[("PostgresPgvectorStore<br/>Postgres + pgvector")]
+    end
+
+    LLM["Groq<br/>OpenAI-compatible API"]
+    SCHED["APScheduler<br/>per-user digests + reminders"]
+
+    WEB --> ROUTERS
+    REST --> ROUTERS
+    BOT --> core
+    ROUTERS --> SERVICES
+    SERVICES --> core
+    core --> persistence
+    core --> LLM
+    SCHED --> SERVICES
+    SCHED --> NOTIFY
 ```
 
-Everything else is optional and safely skipped when unset — the full reference:
+### Layer responsibilities
 
-| Variable | Required | Description |
-| --- | :---: | --- |
-| `GROQ_API_KEY` | yes | Groq API key ([console.groq.com](https://console.groq.com)) |
-| `GROQ_MODEL` | | Model id (default `llama-3.3-70b-versatile`) |
-| `DISCORD_BOT_TOKEN` | bot | Discord bot token (required only for the bot) |
-| `DISCORD_CHANNEL_ID` | bot | Channel id for the daily push |
-| `DISCORD_GUILD_ID` | | Guild id for instant slash-command sync (else global sync) |
-| `ARXIV_QUERY` | | arXiv query (default `cat:cs.AI`) |
-| `DAILY_COUNT` / `REPORT_COUNT` | | Papers fetched per daily push / per report |
-| `PUSH_HOUR` / `PUSH_MINUTE` / `PUSH_TZ_OFFSET` | | Default daily push time and timezone offset |
-| `EMBED_MODEL` | | Embedding model (default `all-MiniLM-L6-v2`, or `BAAI/bge-m3`) |
-| `INDEX_TYPE` / `HNSW_M` | | Vector index: `flat` (exact) or `hnsw` (approximate) |
-| `RERANK_ENABLED` / `RERANK_MODEL` | | Enable BGE cross-encoder reranking |
-| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | | Enable Telegram delivery |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `EMAIL_TO` | | Enable Email delivery |
-| `LINE_CHANNEL_TOKEN` / `LINE_TO` | | Enable LINE delivery (Messaging API) |
-| `GITHUB_TOKEN` | | Optional, raises GitHub API rate limits |
-| `X_BEARER_TOKEN` | | Enables the X/Twitter crawler (X API v2 requires a paid plan) |
-| `JWT_SECRET` | | Dashboard auth secret (ephemeral if unset; set it in production) |
-| `JWT_EXPIRE_MINUTES` | | Token lifetime (default 7 days) |
-| `CORS_ORIGINS` / `API_PUBLIC_URL` / `FRONTEND_URL` | | Dashboard URLs (defaults fit local dev) |
-| `GOOGLE/GITHUB/DISCORD_CLIENT_ID/SECRET` | | OAuth sign-in and Discord account linking |
-| `STORE_BACKEND` / `DATABASE_URL` | | `sqlite` (default) or `postgres` with pgvector |
-| `SCHEDULER_ENABLED` | | Per-user digest/reminder scheduler (compose sets it to 1) |
+- **Routers** own HTTP: validation, auth dependencies, status codes, and SSE framing. They
+  contain no domain logic.
+- **Services** compose domain modules into use cases and hold the only mutable process
+  state. Each exposes a `set_*_service()` injection point, which is how endpoint tests run
+  fully offline.
+- **Domain modules** are independent and side-effect-light. They accept their collaborators
+  as constructor arguments rather than importing singletons.
+- **The store** is the single persistence boundary. Everything above it — users, papers,
+  conversations, reading state, preferences, and vectors — goes through one interface, so
+  swapping SQLite+FAISS for Postgres+pgvector changes no calling code.
 
-The arXiv, news, Hacker News, Reddit, and GitHub crawlers work without credentials.
-Telegram/Email/LINE delivery, OAuth providers, and the X/Twitter crawler activate only once
-their keys are set. Changing `EMBED_MODEL` changes vector dimension; the store detects this
-and rebuilds the index automatically.
+### Request lifecycle
 
-### Setting up the Discord bot
-1. Create an application at the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Under **Bot -> Reset Token**, copy the token into `DISCORD_BOT_TOKEN`.
-3. Under **OAuth2 -> URL Generator**, select scopes `bot` and `applications.commands`, grant
-   `Send Messages`, `Read Message History`, and `Embed Links`, and use the generated URL to
-   invite the bot.
-4. Enable Developer Mode in Discord to copy the channel and guild IDs.
+A streaming question, end to end:
 
-## Usage
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant R as ask router
+    participant S as AskService
+    participant ST as Store
+    participant L as Groq
 
-The dashboard is self-explanatory after [First steps](#first-steps); every page is described
-in [Web dashboard](#web-dashboard), and the full REST surface in [API reference](#api-reference).
+    C->>R: POST /api/ask (JWT)
+    R->>S: retrieve(question)
+    S->>S: classify_complexity
+    S->>ST: hybrid retrieval (dense + BM25)
+    ST-->>S: candidate papers
+    S-->>R: papers
+    R-->>C: SSE conversation
+    loop generation
+        S->>L: stream grounded answer
+        L-->>S: token
+        R-->>C: SSE token
+    end
+    R->>ST: persist message + citations
+    R-->>C: SSE citations, done
+```
 
-### Discord bot commands
+## How retrieval works
+
+### Ingestion
+
+Collection normalizes heterogeneous sources into one paper record, then writes to both
+representations — relational rows for structured queries, vectors for semantic search.
+
+```mermaid
+flowchart LR
+    subgraph src["Sources"]
+        A["arXiv"]
+        N["News RSS"]
+        H["Hacker News"]
+        RD["Reddit"]
+        G["GitHub trending"]
+        U["User RSS feeds"]
+    end
+
+    src --> CR["Crawlers<br/>normalize to paper record"]
+    CR --> PDF["PDF full text<br/>PyMuPDF section parsing<br/>(optional)"]
+    PDF --> SUM["LLM summarization<br/>summary + key insights"]
+    SUM --> CH["Chunking<br/>+ contextual situating"]
+    CH --> EM["Embedding<br/>sentence-transformers"]
+    EM --> VEC[("Vector index<br/>FAISS flat or HNSW<br/>pgvector in deployment")]
+    SUM --> REL[("Relational store<br/>papers · metadata · sources")]
+```
+
+Chunks are **contextually situated** before embedding: each chunk is prefixed with a short
+description of where it sits in its parent document. This preserves meaning that a bare
+chunk loses — a passage saying "this improves accuracy by 4 points" is far more retrievable
+when the embedding also knows which method and benchmark it belongs to.
+
+### Query pipeline
+
+Retrieval depth is chosen per question rather than fixed. Cheap questions skip retrieval
+entirely; multi-faceted ones get query expansion and reranking.
+
+```mermaid
+flowchart TB
+    Q["Question"] --> CACHE{"Semantic cache<br/>near-duplicate?"}
+    CACHE -->|hit| OUT["Stream answer"]
+    CACHE -->|miss| EMPTY{"Corpus empty?"}
+    EMPTY -->|yes| GEN
+    EMPTY -->|no| CLS["classify_complexity<br/>LLM, heuristic fallback"]
+
+    CLS -->|none| GEN["Grounded generation<br/>SSE token stream"]
+    CLS -->|simple| HY["Hybrid retrieval"]
+    CLS -->|complex| QT["Query transformation<br/>HyDE · multi-query · decomposition"]
+    QT --> HY
+
+    HY --> D["Dense search<br/>FAISS / pgvector"]
+    HY --> S["Sparse search<br/>BM25"]
+    D --> RRF["Reciprocal Rank Fusion<br/>rank-based, k=60"]
+    S --> RRF
+    RRF --> RR{"Reranking enabled?"}
+    RR -->|yes| CE["Cross-encoder rerank<br/>BGE reranker"]
+    RR -->|no| GEN
+    CE --> GEN
+    GEN --> CIT["Citations resolved to<br/>paper · section · link"]
+    CIT --> OUT
+```
+
+**Why Reciprocal Rank Fusion.** Dense and lexical retrievers produce scores on
+incomparable scales — cosine similarity against BM25 term weights. Normalizing them into a
+common range requires calibration that shifts with corpus and query. RRF sidesteps this
+entirely by discarding scores and fusing on rank alone: each result contributes
+`1 / (k + rank)` to its document (rank counted from 1), summed across retrievers.
+
+The constant `k = 60` deliberately flattens the curve. A document ranked tenth by *both*
+retrievers scores `2/70 = 0.029`, which beats a document ranked first by only *one* of them
+at `1/61 = 0.016`. Cross-retriever agreement is worth more than a top position in a single
+ranking — exactly the behavior you want when fusing two methods that fail in different ways:
+vector search misses exact identifiers, BM25 misses paraphrase, and a document both agree on
+is unlikely to be an artifact of either failure mode. The system fetches 20 candidates per
+retriever before fusion, then truncates to the requested result count.
+
+**Two orthogonal routers.** `classify_complexity` decides retrieval *depth*
+(none / simple / complex); `route_query` decides retrieval *scope* (local neighborhood
+versus global community reports). Both prefer an LLM classification and fall back to
+keyword heuristics, which keeps the pipeline working — and deterministically testable —
+without a model.
+
+### Retrieval strategies
+
+| Strategy | Module | What it addresses |
+| --- | --- | --- |
+| Hybrid dense + sparse | `rag/retrievers/hybrid.py` | Vector search misses exact identifiers; BM25 misses paraphrase |
+| Query transformation | `rag/query_transform.py` | Vocabulary mismatch between question and document phrasing |
+| Multi-query expansion | `rag/retrievers/multi_query.py` | Single phrasings under-retrieve on multi-faceted questions |
+| Cross-encoder reranking | `rag/retrievers/reranker.py` | Bi-encoder recall is cheap but imprecise at the top |
+| Parent-document retrieval | `rag/retrievers/parent.py` | Small chunks retrieve well but answer poorly without context |
+| Contextual chunk embedding | `rag/contextual.py` | Isolated chunks lose their document-level meaning |
+| Semantic caching | `rag/semantic_cache.py` | Repeated and near-duplicate questions waste tokens |
+| Chunk-level citations | `rag/chunk_citations.py` | Document-level citations do not show *where* a claim came from |
+
+## Knowledge graph
+
+Beyond passage retrieval, the corpus is projected into two graphs that support questions
+passage search cannot answer — "what are the sub-fields here", "what did this paper build
+on", "which work is most influential".
+
+```mermaid
+flowchart TB
+    Q["Question"] --> R{"route_query"}
+
+    R -->|local| LOC["Vector retrieval<br/>+ graph neighborhood expansion"]
+    R -->|global| GLO["Community report map-reduce<br/>over detected sub-fields"]
+
+    LOC --> ANS["Answer with citations"]
+    GLO --> ANS
+
+    subgraph build["Graph construction"]
+        CG["Concept graph<br/>method · dataset · task · metric<br/>relations extracted from papers"]
+        CN["Citation network<br/>references and citing works<br/>via OpenAlex"]
+        CD["Community detection<br/>cluster into sub-fields"]
+        PR["PageRank<br/>influence ranking"]
+        CG --> CD
+        CN --> PR
+    end
+
+    CD -.-> GLO
+    CG -.-> LOC
+    PR -.-> LOC
+```
+
+- **Concept graph** — relations between methods, datasets, tasks, and metrics are extracted
+  from paper text into a directed graph (NetworkX).
+- **Citation network** — a seed paper expands into prior work (references) and derivative
+  work (citing papers) through OpenAlex, resolved by arXiv DOI with a title-search fallback.
+- **Community detection** produces sub-field clusters; each cluster gets an LLM-written
+  report. Global search answers corpus-level questions by map-reducing over those reports
+  rather than over raw chunks.
+- **PageRank** over the citation network surfaces structurally influential papers, which is
+  a different signal from raw citation count.
+
+The dashboard renders both graphs as an interactive D3 force layout with click-to-reseed;
+a table view is the fallback when a graph is too sparse to lay out usefully.
+
+## Agentic workflows
+
+### Deep research
+
+Decomposes a topic, researches each sub-question independently, then synthesizes a cited
+review. Every stage streams to the client, so a multi-minute run shows progress instead of
+a spinner.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant API as /api/deepresearch
+    participant DR as DeepResearch
+    participant RET as Retrieval
+    participant LLM as Groq
+
+    C->>API: POST topic
+    API->>DR: run(topic)
+    DR->>LLM: decompose into sub-questions
+    LLM-->>DR: sub-questions
+    API-->>C: SSE decompose
+
+    loop each sub-question
+        DR->>RET: retrieve top-k
+        RET-->>DR: papers
+        DR->>LLM: answer with retrieved context
+        LLM-->>DR: section
+        API-->>C: SSE section
+    end
+
+    DR->>LLM: synthesize sections into review
+    LLM-->>DR: synthesis
+    API-->>C: SSE synthesis
+    API-->>C: SSE citations, done
+```
+
+### Agent patterns
+
+| Pattern | Module | Behavior |
+| --- | --- | --- |
+| Adaptive RAG | `agent/adaptive_rag.py` | Classify complexity, then skip / single-shot / multi-step retrieve |
+| Self-RAG | `agent/self_rag.py` | Reflect on evidence sufficiency and refine before answering |
+| Corrective RAG | `agent/corrective_rag.py` | Fall back to external search when local retrieval confidence is low |
+| Iterative retrieval | `agent/research_agent.py` | Multi-round retrieve-and-decide loops for multi-hop questions |
+| Multi-agent | `agent/multi_agent.py` | Planner, Retriever, Writer, Critic with a bounded revision loop |
+| Tool calling | `agent/tool_agent.py` | Natural-language agent over local tools: search, trends, tasks, calendar export |
+
+## Evaluation
+
+Two tracks, because they answer different questions.
+
+**Deterministic offline metrics** — precision@k, recall, MRR, lexical faithfulness, and
+citation accuracy. No LLM involved, so they are fast, free, and safe to assert on in CI as
+regression gates.
+
+**LLM-as-judge metrics** — RAGAS-style claim-level faithfulness, answer relevancy, and
+context precision/recall, implemented directly against the Groq client. Adding the `ragas`
+package would have pulled in 41 transitive dependencies including the entire LangChain
+ecosystem, with two version conflicts against the existing stack; the metrics themselves are
+a few hundred lines, so they are implemented natively instead.
+
+`compare_pipelines` scores multiple RAG configurations against a shared golden dataset,
+which is how retrieval changes get evaluated before they are merged rather than after.
+
+```bash
+POST /api/eval  {"engine": "offline"}   # deterministic, always available
+POST /api/eval  {"engine": "judge"}     # LLM-judged, 503 without GROQ_API_KEY
+```
+
+## Features
+
+### Collection and summarization
+- **Multi-source ingestion** — arXiv, AI news RSS, Hacker News, Reddit, GitHub trending, and
+  X/Twitter, plus per-user custom RSS feeds.
+- **LLM summarization** — a concise summary and key insights for every item.
+- **PDF full-text ingestion** — parse arXiv PDFs into titled sections (abstract, method,
+  results) so answers draw on full text rather than abstracts alone.
+
+### Retrieval and question answering
+- Hybrid dense + sparse retrieval fused by RRF, with optional HNSW indexing at scale.
+- Query transformation (HyDE, multi-query, decomposition) and cross-encoder reranking.
+- Parent-document retrieval, contextual chunk embedding, and a semantic answer cache.
+- Traceable chunk-level citations resolving to paper, section, and link.
+
+### Knowledge graph
+- Concept graph over methods, datasets, tasks, and metrics.
+- Citation network expansion with PageRank influence ranking.
+- Community detection with per-community summaries.
+- Local/global query routing and community-report global search.
+
+### Research workflow
+- Literature review generation with identified research gaps.
+- Multi-paper method comparison tables.
+- Guided deep-read explanations of dense papers.
+- Credibility signals from citation data and reproducibility signals from linked code.
+- Reading kanban (to-read / reading / done) with drag-and-drop, plus topic subscriptions.
+- Exports: BibTeX with generated keys, CSV, and Obsidian-ready Markdown with frontmatter and
+  wikilinks (compatible with Juggl and Dataview).
+- Writing assistance: LaTeX drafts, slide outlines, polishing, contribution extraction,
+  review suggestions, and submission checklists.
+
+### Accounts, delivery, and personalization
+- **Auth** — email + password (bcrypt, JWT), Google and GitHub OAuth, Discord account linking.
+- **Notification preferences** — frequency, delivery time, timezone, quiet hours, channels,
+  and deduplication, all per user.
+- **Per-user scheduling** — APScheduler cron-schedules each user's digest from their
+  preferences and polls due reminders every minute.
+- **Weekly digest** with rising-keyword detection and next-period forecasting.
+- **Learning paths and skills** — generated study plans per topic with progress tracking.
+- **Analytics** — activity timelines, action totals, reading pipeline, and top topics.
+- **Preference reward model** — a Bradley-Terry model learns ranking weights from clicks,
+  likes, subscriptions, ratings, and questions.
+- **Trend forecasting** — keyword time series with an LSTM sliding-window forecaster.
+- **Health monitoring** — store statistics, scheduler state, and provider-key readiness.
+
+## Web dashboard
+
+| Page | Purpose |
+| --- | --- |
+| **Overview** | Card wall: today's papers, weekly digest, trends, to-read, recent conversations, reading analytics, system health |
+| **Ask** | Token-streamed Q&A over the corpus with adaptive retrieval and cited sources |
+| **Conversations** | Persistent history with search, rename, delete, and public share links |
+| **Research** | Deep research (live streamed), literature review, comparison, report, BibTeX, guided explain |
+| **Write** | Polish, contribution extraction, review suggestions, checklist, LaTeX draft, slide outline |
+| **Graph** | Interactive D3 citation and concept graphs with PageRank and communities; global search; table fallback |
+| **Library** | Paper list with credibility and reproducibility signals, fetch-today, personalized picks, reading kanban, RSS manager, exports |
+| **Trends** | Rising keywords by slope, per-keyword series with forecast, data-source status |
+| **Learning** | Topic-based learning path generation with progress; skill levels |
+| **Analytics** | Activity chart, action totals, reading pipeline, top topics |
+| **Settings** | Account, locale, theme, OAuth and Discord links, notification schedule, reminders, system status |
+
+**Interface design.** Built on [Primer React](https://primer.style/) in night mode: `#0d1117`
+canvas, `#30363d` hairlines, `#2f81f7` accent, 6px radii, GitHub-like information density.
+A day theme is one toggle away. Fully bilingual (EN/ZH) via react-i18next, with locale
+persisted to the user profile. `⌘K` opens a command palette. Streaming endpoints are consumed
+as `fetch` streams so requests can carry POST bodies and an Authorization header, which
+`EventSource` cannot do.
+
+## Discord bot
+
+A secondary interface sharing the same core, for teams that live in chat.
 
 | Command | Description |
 | --- | --- |
-| `/daily` | Fetch, summarize, and push today's AI papers now |
-| `/ask <question>` | Answer from the knowledge base, with cited papers |
+| `/daily` | Fetch, summarize, and push today's papers now |
+| `/ask <question>` | Answer from the knowledge base with cited papers |
 | `/deepresearch <topic>` | Decompose a topic and synthesize a cited review |
-| `/report <topic>` | Gather relevant papers and generate a structured report |
-| `/litreview <topic>` | Generate a literature review with research gaps |
-| `/compare <topic>` | Produce a multi-paper method comparison table |
+| `/report <topic>` | Structured report over relevant papers |
+| `/litreview <topic>` | Literature review with research gaps |
+| `/compare <topic>` | Multi-paper method comparison table |
 | `/bibtex <topic>` | Collect relevant papers and export BibTeX |
 | `/explain <topic>` | Guided deep-read of the most relevant paper |
-| `/trends` | Show rising keywords across collected papers |
-| `/sources` | Pull trending AI content from HN, GitHub, Reddit, and news |
-| `/latex <topic>` | Generate a LaTeX paper draft skeleton |
-| `/slides <topic>` | Generate a slide outline |
-| `/review <text>` | Get paper-review suggestions |
-| `/like <id>` | Mark a paper you like to improve recommendations |
+| `/trends` | Rising keywords across the corpus |
+| `/sources` | Trending content from HN, GitHub, Reddit, and news |
+| `/latex <topic>` | LaTeX paper draft skeleton |
+| `/slides <topic>` | Slide outline |
+| `/review <text>` | Paper-review suggestions |
+| `/like <id>` | Record a preference to improve recommendations |
 | `/agent <request>` | Natural-language agent that calls tools |
 | `/set_push_time <h> <m>` | Set the daily push time (persisted) |
-| `/help` | Show command help and current push time |
+| `/help` | Command help and current push time |
 
-The daily digest runs automatically at the configured time and is broadcast to every
-configured platform.
+Setup: create an application in the [Discord Developer Portal](https://discord.com/developers/applications),
+copy the bot token into `DISCORD_BOT_TOKEN`, then under **OAuth2 -> URL Generator** select
+scopes `bot` and `applications.commands` with `Send Messages`, `Read Message History`, and
+`Embed Links`. Setting `DISCORD_GUILD_ID` syncs slash commands to one guild instantly;
+leaving it unset uses global sync, which can take up to an hour to propagate.
 
 ## API reference
 
-All endpoints are also browsable live at `/docs` (Swagger UI) and `/redoc`. Unless marked
-**public**, endpoints require `Authorization: Bearer <JWT>` obtained from register/login or
-OAuth. Streaming endpoints return Server-Sent Events (`data: {json}\n\n` frames).
+Every endpoint is browsable live at `/docs` (Swagger UI) and `/redoc`. Unless marked
+**public**, endpoints require `Authorization: Bearer <JWT>` from register/login or OAuth.
+Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
 
-### Auth (`/auth`)
+### Auth — `/auth`
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/auth/register` | Create an account (email + password), returns `{token, user}` — public |
+| POST | `/auth/register` | Create an account, returns `{token, user}` — public |
 | POST | `/auth/login` | Sign in, returns `{token, user}` — public |
 | GET | `/auth/me` | Current user profile |
 | PATCH | `/auth/me` | Update `display_name`, `locale`, or password |
 | GET | `/auth/providers` | Which OAuth providers are configured — public |
-| GET | `/auth/oauth/{provider}` | Start Google/GitHub OAuth sign-in (302) — public |
-| GET | `/auth/oauth/{provider}/callback` | OAuth callback; redirects to the frontend with a token — public |
+| GET | `/auth/oauth/{provider}` | Begin Google/GitHub sign-in (302) — public |
+| GET | `/auth/oauth/{provider}/callback` | OAuth callback, redirects with token — public |
 | POST | `/auth/discord/link` | Get the Discord account-linking URL |
-| DELETE | `/auth/discord/link` | Unlink the Discord account |
+| DELETE | `/auth/discord/link` | Unlink Discord |
 
-### Q&A and conversations (`/api`)
+### Q&A and conversations — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/api/ask` | **SSE** — streamed answer over the library; events: `conversation`, `token`, `citations`, `done` |
+| POST | `/api/ask` | **SSE** — streamed grounded answer; events: `conversation`, `token`, `citations`, `done` |
 | GET | `/api/conversations` | List conversations (`?query=` searches titles and messages) |
 | GET | `/api/conversations/{id}` | One conversation with messages and citations |
 | PATCH | `/api/conversations/{id}` | Rename |
@@ -457,161 +564,422 @@ OAuth. Streaming endpoints return Server-Sent Events (`data: {json}\n\n` frames)
 | POST | `/api/conversations/{id}/share` | Create a public share link, returns `{token, url}` |
 | GET | `/api/shared/{token}` | Read a shared conversation — public |
 
-### Papers and library (`/api`)
+### Library and papers — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/papers` | List papers (`?limit=&source=&query=`) with reproducibility signals |
-| GET | `/api/paper/{id}` | Paper detail with credibility (OpenAlex) and reproducibility |
-| POST | `/api/daily` | Fetch today's arXiv papers, store and index them |
+| GET | `/api/paper/{id}` | Paper detail with credibility and reproducibility signals |
+| POST | `/api/daily` | Fetch today's arXiv batch, store and index it |
 | GET | `/api/daily/personalized` | Papers ranked against your interaction profile |
-| POST | `/api/interactions` | Log an interaction (`like`, `click`, ...) for recommendations (201) |
+| POST | `/api/interactions` | Log an interaction for recommendations (201) |
 | GET | `/api/reading` | Reading kanban items (`?state=to-read\|reading\|done`) |
-| POST | `/api/reading` | Add a paper to the kanban (201) |
+| POST | `/api/reading` | Add to the kanban (201) |
 | PATCH | `/api/reading/{paper_id}` | Move between states |
-| DELETE | `/api/reading/{paper_id}` | Remove from the kanban (204) |
+| DELETE | `/api/reading/{paper_id}` | Remove (204) |
 | GET | `/api/export/csv` | Export the library as CSV |
 | GET | `/api/export/bibtex` | Export as BibTeX |
-| GET | `/api/export/obsidian` | Export as an Obsidian-ready Markdown zip |
+| GET | `/api/export/obsidian` | Export as an Obsidian-ready Markdown archive |
 
-### Feeds and subscriptions (`/api`)
+### Feeds and subscriptions — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/feeds` | Your RSS feeds |
 | POST | `/api/feeds` | Add a feed (201; 409 on duplicate) |
-| PATCH | `/api/feeds/{id}` | Update title/category/enabled |
-| DELETE | `/api/feeds/{id}` | Remove a feed (204) |
+| PATCH | `/api/feeds/{id}` | Update title, category, or enabled state |
+| DELETE | `/api/feeds/{id}` | Remove (204) |
 | POST | `/api/feeds/refresh` | Fetch all enabled feeds into the library |
 | GET | `/api/subscriptions` | Your keyword subscriptions |
-| POST | `/api/subscriptions` | Add a keyword subscription (201) |
+| POST | `/api/subscriptions` | Add a subscription (201) |
 | DELETE | `/api/subscriptions/{name}` | Remove one (204) |
 
-### Graph (`/api/graph`)
+### Graph — `/api/graph`
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/api/graph/citation?seed=` | Citation network around a seed (arXiv id or title), D3 nodes/edges + PageRank + communities |
-| GET | `/api/graph/concept` | Concept graph over the library (`?refresh=1` rebuilds) |
-| GET | `/api/graph/global?query=` | Community-summary map-reduce answer for corpus-level questions |
+| GET | `/api/graph/citation?seed=` | Citation network around a seed, with nodes, edges, PageRank, and communities |
+| GET | `/api/graph/concept` | Concept graph over the corpus (`?refresh=1` rebuilds) |
+| GET | `/api/graph/global?query=` | Community-report map-reduce answer for corpus-level questions |
 
-### Research and writing (`/api`)
+### Research and writing — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/api/deepresearch` | **SSE** — decompose → per-question research → synthesis; events: `decompose`, `section`, `synthesis`, `citations`, `done` |
+| POST | `/api/deepresearch` | **SSE** — events: `decompose`, `section`, `synthesis`, `citations`, `done` |
 | POST | `/api/litreview` | Literature review over retrieved papers |
 | POST | `/api/compare` | Multi-paper method comparison table |
 | POST | `/api/report` | Structured topic report with citations |
 | POST | `/api/bibtex` | BibTeX for retrieved papers |
 | POST | `/api/explain` | Guided plain-language deep-read of one paper |
-| POST | `/api/write/{tool}` | Writing tools: `polish`, `contributions`, `review`, `checklist`, `latex`, `slides` |
+| POST | `/api/write/{tool}` | `polish`, `contributions`, `review`, `checklist`, `latex`, `slides` |
 
-### Insights (`/api`)
+### Insights — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/api/trends` | Rising keywords (slope-ranked) + top keywords (`?granularity=month\|year&top=`) |
+| GET | `/api/trends` | Rising keywords by slope plus top keywords (`?granularity=month\|year&top=`) |
 | GET | `/api/trends/{keyword}` | One keyword's time series and next-period forecast |
 | GET | `/api/digest/weekly` | Weekly digest: top recent papers, keywords, LLM overview |
-| GET | `/api/analytics` | Your activity, action totals, reading pipeline, top topics (`?days=`) |
+| GET | `/api/analytics` | Activity, action totals, reading pipeline, top topics (`?days=`) |
 
-### Notifications, reminders, learning (`/api`)
+### Notifications, reminders, learning — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/notifications/preferences` | Your notification preferences |
 | PUT | `/api/notifications/preferences` | Update them; the scheduler reschedules immediately |
 | GET | `/api/reminders` | Open reminders (`?include_done=true` for all) |
-| POST | `/api/reminders` | Create a reminder (201) |
+| POST | `/api/reminders` | Create (201) |
 | POST | `/api/reminders/{id}/complete` | Mark done |
 | DELETE | `/api/reminders/{id}` | Delete (204) |
 | GET | `/api/learning-paths` | Your learning paths |
-| POST | `/api/learning-paths` | Generate a path for a topic (LLM, retrieval fallback) (201) |
-| PATCH | `/api/learning-paths/{id}` | Update items/progress/topic |
+| POST | `/api/learning-paths` | Generate a path for a topic (201) |
+| PATCH | `/api/learning-paths/{id}` | Update items, progress, or topic |
 | DELETE | `/api/learning-paths/{id}` | Delete (204) |
 | GET | `/api/skills` | Your skill levels |
 | PUT | `/api/skills` | Set a skill level (0-100) |
 
-### System and extras (`/api`)
+### System — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/api/health` | Store stats, scheduler status, provider-key readiness (booleans only) — public |
+| GET | `/api/health` | Store stats, scheduler status, provider readiness (booleans only) — public |
 | GET | `/api/sources` | Data-source configuration status |
-| GET | `/api/memory` | Your agent memory items (`?kind=&contains=&limit=`) |
+| GET | `/api/memory` | Agent memory items (`?kind=&contains=&limit=`) |
 | POST | `/api/memory` | Add a memory item (201) |
-| POST | `/api/eval` | RAG evaluation — `engine=offline` (default): precision@k, recall, MRR, lexical faithfulness; `engine=judge`: RAGAS-style LLM-judged faithfulness, answer relevancy, context precision/recall (503 without `GROQ_API_KEY`) |
+| POST | `/api/eval` | RAG evaluation — `engine=offline` or `engine=judge` |
 | POST | `/api/agent` | Tool-calling agent (503 without `GROQ_API_KEY`) |
 
-## Database schema
+## Data model
 
-One schema across both store backends (SQLite + FAISS locally, Postgres + pgvector in
-deployment), behind the `src/store` abstraction:
+One schema across both store backends. Vectors live in a FAISS index file locally and in a
+`paper_embeddings` table under Postgres; everything else is identical.
+
+```mermaid
+erDiagram
+    users ||--o{ conversations : owns
+    users ||--o{ interactions : generates
+    users ||--o{ feeds : subscribes
+    users ||--o{ user_subscriptions : tracks
+    users ||--o{ reading_list : curates
+    users ||--o{ reminders : sets
+    users ||--o{ learning_paths : follows
+    users ||--o{ user_skills : has
+    users ||--|| notification_preferences : configures
+    conversations ||--o{ messages : contains
+    papers ||--o{ interactions : receives
+    papers ||--o{ reading_list : appears_in
+    papers ||--o| paper_embeddings : indexed_by
+
+    users {
+        int id PK
+        string email UK
+        string password_hash
+        string google_sub
+        string github_id
+        string discord_id
+        string display_name
+        string locale
+    }
+    papers {
+        string id PK "arXiv id or slug"
+        string title
+        text abstract
+        string authors
+        string link
+        string published
+        text summary
+        string source
+    }
+    interactions {
+        int id PK
+        string paper_id FK
+        int user_id FK
+        string action "like, click, ask"
+        float value
+        string created_at
+    }
+    conversations {
+        int id PK
+        int user_id FK
+        string title
+        string share_token
+        string created_at
+        string updated_at
+    }
+    messages {
+        int id PK
+        int conversation_id FK
+        string role
+        text content
+        json citations
+    }
+    reading_list {
+        int user_id PK
+        string paper_id PK
+        string title
+        string state "to-read, reading, done"
+        json tags
+        text note
+    }
+    feeds {
+        int id PK
+        int user_id FK
+        string url UK
+        string title
+        string category
+        bool enabled
+    }
+    user_subscriptions {
+        int user_id PK
+        string name PK
+        json keywords
+    }
+    notification_preferences {
+        int user_id PK
+        string frequency "daily, weekly, off"
+        int hour
+        int minute
+        string timezone
+        int quiet_start
+        int quiet_end
+        float min_score
+        bool dedupe
+        json channels
+    }
+    reminders {
+        int id PK
+        int user_id FK
+        text text
+        string due_at
+        json context
+        bool done
+    }
+    learning_paths {
+        int id PK
+        int user_id FK
+        string topic
+        json items
+        json progress
+    }
+    user_skills {
+        int user_id PK
+        string skill PK
+        int level "0-100"
+    }
+    paper_embeddings {
+        string paper_id FK
+        vector embedding
+    }
+```
+
+## Configuration
+
+Settings live in `backend/.env`, which is never committed. The minimum working setup:
+
+```bash
+GROQ_API_KEY=your-groq-api-key       # required
+
+JWT_SECRET=$(openssl rand -hex 32)   # recommended: ephemeral if unset
+SCHEDULER_ENABLED=1                  # per-user digests and reminders
+STORE_BACKEND=sqlite                 # or postgres, with DATABASE_URL
+```
+
+Everything else is optional and safely skipped when unset.
+
+| Variable | Required | Description |
+| --- | :---: | --- |
+| `GROQ_API_KEY` | yes | Groq API key |
+| `GROQ_MODEL` | | Model id (default `llama-3.3-70b-versatile`) |
+| `GROQ_BASE_URL` | | OpenAI-compatible endpoint override |
+| `DISCORD_BOT_TOKEN` | bot | Discord bot token |
+| `DISCORD_CHANNEL_ID` | bot | Channel for the daily push |
+| `DISCORD_GUILD_ID` | | Guild id for instant slash-command sync |
+| `ARXIV_QUERY` | | arXiv query (default `cat:cs.AI`) |
+| `DAILY_COUNT` / `REPORT_COUNT` | | Papers per daily push / per report |
+| `PUSH_HOUR` / `PUSH_MINUTE` / `PUSH_TZ_OFFSET` | | Default push time and timezone offset |
+| `EMBED_MODEL` | | Embedding model (default `all-MiniLM-L6-v2`, or `BAAI/bge-m3`) |
+| `INDEX_TYPE` / `HNSW_M` | | Vector index: `flat` (exact) or `hnsw` (approximate) |
+| `RERANK_ENABLED` / `RERANK_MODEL` | | Cross-encoder reranking |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | | Telegram delivery |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `EMAIL_TO` | | Email delivery |
+| `LINE_CHANNEL_TOKEN` / `LINE_TO` | | LINE delivery (Messaging API) |
+| `GITHUB_TOKEN` | | Raises GitHub API rate limits |
+| `X_BEARER_TOKEN` | | X/Twitter crawler (X API v2 requires a paid plan) |
+| `JWT_SECRET` | | Auth secret; ephemeral if unset, so set it in production |
+| `JWT_EXPIRE_MINUTES` | | Token lifetime (default 7 days) |
+| `CORS_ORIGINS` / `API_PUBLIC_URL` / `FRONTEND_URL` | | Deployment URLs |
+| `GOOGLE` / `GITHUB` / `DISCORD_CLIENT_ID` and `_SECRET` | | OAuth sign-in and Discord linking |
+| `STORE_BACKEND` / `DATABASE_URL` | | `sqlite` (default) or `postgres` |
+| `SCHEDULER_ENABLED` | | Per-user digest and reminder scheduler |
+
+**Notes.** The arXiv, news, Hacker News, Reddit, and GitHub crawlers need no credentials.
+Telegram, Email, LINE, OAuth, and X/Twitter activate only once their keys are present.
+Changing `EMBED_MODEL` changes vector dimensionality; the store detects the mismatch and
+rebuilds the index automatically. Leaving `JWT_SECRET` unset generates a random secret at
+startup, which invalidates every existing token on restart — acceptable locally, not in
+production.
+
+## Deployment
+
+The Docker build is multi-stage: the frontend compiles in a Node stage and its `dist` output
+is copied into the Python image, which FastAPI serves as static files behind the API routes.
+One container, one port.
+
+```mermaid
+flowchart TB
+    subgraph img["Application container"]
+        UV["FastAPI + Uvicorn<br/>:8000"]
+        DIST["frontend/dist<br/>served as static files"]
+        SC["APScheduler<br/>digests + reminders"]
+        UV --- DIST
+        UV --- SC
+    end
+
+    subgraph opt["Optional: --profile postgres"]
+        PGC[("pgvector/pgvector:pg17")]
+    end
+
+    VOL[("./backend/data<br/>SQLite + FAISS index")]
+    EXT["Groq · OpenAlex · arXiv<br/>Telegram · SMTP · LINE"]
+
+    UV --- VOL
+    UV -.->|STORE_BACKEND=postgres| PGC
+    UV --> EXT
+```
+
+**Scaling notes.** The default `IndexFlatIP` is exact and fine well past tens of thousands
+of papers; switch `INDEX_TYPE=hnsw` when approximate search becomes worth the recall
+tradeoff. The scheduler holds in-process state (dedupe sets, fired-reminder ids), so running
+multiple API replicas with `SCHEDULER_ENABLED=1` would duplicate digests — run the scheduler
+in exactly one replica. Postgres + pgvector is the path to horizontal scaling, since
+SQLite+FAISS assumes a single writer and a local index file.
+
+## Project structure
+
+Backend and frontend are fully separated; the root holds only cross-cutting orchestration.
 
 ```
-users                        papers                      interactions
-├── id                      ├── id (arXiv id / slug)    ├── id
-├── email (unique)          ├── title                   ├── paper_id (FK)
-├── password_hash           ├── abstract                ├── user_id
-├── google_sub              ├── authors                 ├── action (like/click/ask...)
-├── github_id               ├── link                    ├── value
-├── discord_id              ├── published               └── created_at
-├── display_name            ├── summary
-└── locale                  └── source                  paper_embeddings (Postgres)
-                                                        ├── paper_id (FK, cascade)
-feeds                        user_subscriptions         └── embedding (vector)
-├── id                      ├── user_id                    (FAISS index files locally)
-├── user_id                 ├── name (unique per user)
-├── url (unique per user)   └── keywords (JSON)         notification_preferences
-├── title / category                                    ├── user_id (PK)
-└── enabled                  reading_list               ├── frequency (daily/weekly/off)
-                            ├── user_id + paper_id (PK) ├── hour / minute / timezone
-conversations               ├── title / state           ├── quiet_start / quiet_end
-├── id                      ├── tags (JSON)             ├── min_score / dedupe
-├── user_id                 └── note                    └── channels (JSON)
-├── title
-├── share_token              reminders                   learning_paths
-└── created_at / updated_at ├── id                      ├── id
-                            ├── user_id                 ├── user_id
-messages                    ├── text                    ├── topic
-├── id                      ├── due_at                  ├── items (JSON, checkboxes)
-├── conversation_id         ├── context (JSON)          └── progress (JSON)
-├── role                    └── done
-├── content                                              user_skills
-└── citations (JSON)                                    ├── user_id + skill (PK)
-                                                        └── level (0-100)
+backend/                 Python backend — run all uv commands from here
+  main.py                Entry point: api | bot | all
+  pyproject.toml         Dependencies (uv)
+  .env                   Secrets and settings, not version-controlled
+  src/
+    config.py            Settings loaded from backend/.env
+    config_report.py     Startup readiness and degraded-feature report
+    api/                 app, deps, auth, routers/ (14), services/ (5)
+    store/               base (interface), sqlite_faiss, postgres_pgvector
+    scheduler.py         Per-user digest and reminder scheduling
+    crawlers/            arxiv, news, hackernews, reddit, github, twitter, openalex
+    llm/                 groq_client, key_rotator
+    rag/                 embedder, chunker, retrievers/, contextual, caching,
+                         citations, pdf_ingest, pipeline, evaluation, llm_judge
+    graph/               concept_graph, citation_network, graph_rag, global_search,
+                         router, relationship, visualize
+    agent/               adaptive_rag, self_rag, corrective_rag, research_agent,
+                         deep_research, multi_agent, tool_agent
+    analysis/            trends, lstm_forecaster
+    recommend/           ranker, reward, personalize, reading_list, credibility,
+                         reproducibility, subscriptions
+    tools/               registry, builtins, research_tools, writing_tools,
+                         task_manager, calendar_ics, obsidian_export
+    memory/  notify/  db/  utils/  bot/
+  tests/                 73 offline test modules + tests/e2e (Playwright)
+  data/                  Generated index, metadata, SQLite database
+frontend/                React 19 + Vite + TypeScript + Primer
+  src/pages/             14 route components
+  src/components/        Shell, Card, ForceGraph, BarChart, CommandPalette, Markdown
+  src/lib/               api, auth, sse clients
+  src/i18n/              EN/ZH translations
+Dockerfile               Multi-stage: frontend dist baked into the API image
+docker-compose.yml       Single container; optional Postgres via --profile postgres
+.github/workflows/       CI: backend (with pgvector), frontend, Docker build
 ```
 
 ## Testing
 
-The full suite is offline and deterministic. It uses a fake embedder, stubbed LLM and network
-clients, and injected transports, so no model downloads or credentials are needed. Store
-behavior tests also run against Postgres+pgvector when `TEST_DATABASE_URL` is set (CI does
-this via a service container), and a Playwright UI smoke suite runs with `E2E=1` against
-local dev servers.
+The suite is offline and deterministic by construction: a fake embedder with stable hashing,
+stubbed LLM and network clients, and injected transports. No model downloads, no credentials,
+no network. That is what makes it usable as a pre-commit gate rather than a nightly job.
 
 ```bash
 cd backend
-uv run pytest                    # 378 passed (postgres/e2e auto-skip locally)
-E2E=1 uv run pytest tests/e2e    # UI smoke, needs both dev servers running
+uv run pytest                     # 390 passed, 20 skipped (postgres and e2e skip locally)
+E2E=1 uv run pytest tests/e2e     # Playwright UI smoke, needs both dev servers running
 ```
 
-CI runs the backend suite against a real pgvector service container (389 tests), type-checks
-and builds the frontend, and validates the Docker image build on `main`.
+Store behavior tests are parameterized over both backends and run against real
+Postgres+pgvector whenever `TEST_DATABASE_URL` is set. CI sets it via a service container, so
+the same assertions verify both persistence implementations:
+
+```
+CI backend job:  403 passed, 7 skipped     # includes the pgvector-backed store tests
+Local:           390 passed, 20 skipped    # those tests skip without a database
+```
+
+CI additionally type-checks and builds the frontend, and validates the Docker image build on
+`main`.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+| --- | --- |
+| `503` from `/api/agent` or `/api/eval?engine=judge` | No `GROQ_API_KEY`. These endpoints require generation and refuse rather than returning degraded output. |
+| Every token invalid after a restart | `JWT_SECRET` is unset, so a random one is generated per start. Set it. |
+| Retrieval returns nothing | The corpus is empty. Run **Library -> Fetch today** or `POST /api/daily`. |
+| Vector dimension mismatch errors | `EMBED_MODEL` changed. The store detects this and rebuilds; delete `backend/data/faiss.index` if it persists. |
+| Digests never arrive | `SCHEDULER_ENABLED` is off, the channel has no credentials, or delivery falls inside quiet hours. Check `GET /api/health`. |
+| Slash commands missing in Discord | Global sync takes up to an hour. Set `DISCORD_GUILD_ID` for instant per-guild sync. |
+| `uv sync` is very slow on first run | It resolves and downloads PyTorch. Subsequent runs are cached. |
+| Frontend loads but API calls fail in dev | The Vite dev server proxies `/api` to `:8000` — make sure the backend is running there. |
 
 ## Contributing
 
-1. Fork the repository and create a feature branch: `git checkout -b feature/amazing-feature`
-2. Make your changes and add tests (offline stubs; see `backend/tests/` for patterns)
-3. Run the checks locally:
-   ```bash
-   cd backend && uv run pytest -q
-   cd frontend && npx tsc --noEmit && npm run build
-   ```
-4. Commit with a conventional message: `feat(scope): add amazing feature`
-5. Push and open a Pull Request — CI must pass (backend + pgvector, frontend, Docker build)
+```bash
+# 1. Branch
+git checkout -b feature/your-feature
+
+# 2. Verify before pushing
+cd backend  && uv run pytest -q
+cd frontend && npx tsc --noEmit && npm run build
+```
+
+Conventions that keep the suite fast and the review short:
+
+- **Tests are offline.** Stub external calls and inject transports; see `backend/tests/` for
+  the established patterns. A test that needs network or credentials will not run in CI.
+- **New services get an injection point.** Follow the `set_*_service()` convention so
+  endpoint tests can substitute a double.
+- **One commit per feature**, with a conventional subject: `feat(scope): add thing`.
+- **Optional dependencies degrade.** If a feature needs a key or a model, detect its absence
+  and skip cleanly rather than raising.
+
+Open a pull request once CI is green (backend with pgvector, frontend build, Docker build).
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Acknowledgements
+
+The retrieval and agent design draws on published work, adapted to a single-container,
+credential-optional deployment:
+
+- **Reciprocal Rank Fusion** — Cormack et al., *Reciprocal Rank Fusion Outperforms Condorcet
+  and Individual Rank Learning Methods* (2009)
+- **Adaptive-RAG** — Jeong et al., *Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large
+  Language Models through Question Complexity* (2024)
+- **Self-RAG** — Asai et al., *Self-RAG: Learning to Retrieve, Generate, and Critique through
+  Self-Reflection* (2023)
+- **Corrective RAG** — Yan et al., *Corrective Retrieval Augmented Generation* (2024)
+- **GraphRAG** — Edge et al., *From Local to Global: A Graph RAG Approach to Query-Focused
+  Summarization* (2024)
+- **HyDE** — Gao et al., *Precise Zero-Shot Dense Retrieval without Relevance Labels* (2022)
+- **RAGAS** — Es et al., *RAGAS: Automated Evaluation of Retrieval Augmented Generation* (2023)
+
+Built on [FastAPI](https://fastapi.tiangolo.com/), [Primer React](https://primer.style/),
+[FAISS](https://github.com/facebookresearch/faiss),
+[sentence-transformers](https://www.sbert.net/), [NetworkX](https://networkx.org/),
+[pgvector](https://github.com/pgvector/pgvector), and [uv](https://github.com/astral-sh/uv).
+Citation data from [OpenAlex](https://openalex.org/).
