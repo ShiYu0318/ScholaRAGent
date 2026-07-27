@@ -43,7 +43,6 @@ with no managed services required.
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
-- [Acknowledgements](#acknowledgements)
 
 ## Overview
 
@@ -960,26 +959,3 @@ Open a pull request once CI is green (backend with pgvector, frontend build, Doc
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-## Acknowledgements
-
-The retrieval and agent design draws on published work, adapted to a single-container,
-credential-optional deployment:
-
-- **Reciprocal Rank Fusion** — Cormack et al., *Reciprocal Rank Fusion Outperforms Condorcet
-  and Individual Rank Learning Methods* (2009)
-- **Adaptive-RAG** — Jeong et al., *Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large
-  Language Models through Question Complexity* (2024)
-- **Self-RAG** — Asai et al., *Self-RAG: Learning to Retrieve, Generate, and Critique through
-  Self-Reflection* (2023)
-- **Corrective RAG** — Yan et al., *Corrective Retrieval Augmented Generation* (2024)
-- **GraphRAG** — Edge et al., *From Local to Global: A Graph RAG Approach to Query-Focused
-  Summarization* (2024)
-- **HyDE** — Gao et al., *Precise Zero-Shot Dense Retrieval without Relevance Labels* (2022)
-- **RAGAS** — Es et al., *RAGAS: Automated Evaluation of Retrieval Augmented Generation* (2023)
-
-Built on [FastAPI](https://fastapi.tiangolo.com/), [Primer React](https://primer.style/),
-[FAISS](https://github.com/facebookresearch/faiss),
-[sentence-transformers](https://www.sbert.net/), [NetworkX](https://networkx.org/),
-[pgvector](https://github.com/pgvector/pgvector), and [uv](https://github.com/astral-sh/uv).
-Citation data from [OpenAlex](https://openalex.org/).
