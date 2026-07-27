@@ -2,12 +2,9 @@
 
 # ScholaRAGent
 
-**A self-hosted research copilot that turns the daily firehose of AI papers into a queryable,
-citable knowledge base.**
+"Scholar + RAG + Agent"
 
-Multi-source ingestion, hybrid retrieval over a vector index and a knowledge graph,
-agentic deep research, and personalized delivery — in one Docker container,
-with no managed services required.
+A Full-Stack Open-Source Academic Research Assistant Platform Powered by Agentic AI and Deeply-Engineered Multi-Paradigm RAG.
 
 [![CI](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-403%20passing-brightgreen.svg)](#testing)
