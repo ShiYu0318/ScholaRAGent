@@ -4,7 +4,7 @@ import { initReactI18next } from "react-i18next";
 import en from "./en";
 import zh from "./zh";
 
-const LOCALE_KEY = "ragency.locale";
+const LOCALE_KEY = "scholaragent.locale";
 
 export function savedLocale(): string {
   return localStorage.getItem(LOCALE_KEY) ?? (navigator.language.startsWith("zh") ? "zh" : "en");

@@ -1,6 +1,6 @@
 export default {
   translation: {
-    app: { name: "RAGency", tagline: "Research copilot" },
+    app: { name: "ScholaRAGent", tagline: "Research copilot" },
     nav: {
       home: "Overview",
       ask: "Ask",

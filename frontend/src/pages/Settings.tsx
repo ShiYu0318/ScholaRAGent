@@ -101,7 +101,7 @@ export function Settings() {
       await refresh();
       if (updated.locale && updated.locale !== i18n.language) {
         i18n.changeLanguage(updated.locale);
-        localStorage.setItem("ragency.locale", updated.locale);
+        localStorage.setItem("scholaragent.locale", updated.locale);
       }
       flash(t("settings.saved"));
     },

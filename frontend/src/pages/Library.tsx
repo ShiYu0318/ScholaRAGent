@@ -57,7 +57,7 @@ const STATES: ReadingItem["state"][] = ["to-read", "reading", "done"];
 
 async function download(path: string, filename: string) {
   const resp = await fetch(path, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("ragency.token") ?? ""}` },
+    headers: { Authorization: `Bearer ${localStorage.getItem("scholaragent.token") ?? ""}` },
   });
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);
