@@ -19,6 +19,7 @@ from src.recommend.reproducibility import reproducibility_signal
 from src.tools.obsidian_export import to_obsidian
 from src.tools.research_tools import to_bibtex
 from src.utils.logger import get_logger
+from src.utils.text_safety import csv_safe
 
 CSV_FIELDS = ("id", "title", "authors", "published", "link", "source", "summary")
 
@@ -122,7 +123,7 @@ class LibraryService:
         writer = csv.DictWriter(buf, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         for p in self.store.all_papers(limit=limit):
-            writer.writerow({k: p.get(k, "") or "" for k in CSV_FIELDS})
+            writer.writerow({k: csv_safe(p.get(k, "") or "") for k in CSV_FIELDS})
         return buf.getvalue()
 
     def export_bibtex(self, limit=1000):

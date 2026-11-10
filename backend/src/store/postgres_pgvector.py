@@ -17,6 +17,7 @@ from src import config
 from src.rag.vector_store import _lexical_overlap, _tokenize
 from src.store.base import Store
 from src.utils.logger import get_logger
+from src.utils.text_safety import safe_link
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -279,7 +280,7 @@ class PostgresPgvectorStore(Store):
                 """,
                 {
                     "id": p["id"], "title": p.get("title", ""), "abstract": p.get("abstract", ""),
-                    "authors": p.get("authors", ""), "link": p.get("link", ""),
+                    "authors": p.get("authors", ""), "link": safe_link(p.get("link", "")),
                     "published": p.get("published", ""), "summary": p.get("summary"),
                     "source": p.get("source", "arxiv"), "created_at": _now(),
                 },
