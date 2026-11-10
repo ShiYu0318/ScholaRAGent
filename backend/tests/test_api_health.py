@@ -18,8 +18,15 @@ def api(tmp_path, fake_embedder, isolated_data):
     store.close()
 
 
-def test_health_shape_and_no_secret_leak(api):
-    resp = api.get("/api/health")
+@pytest.fixture
+def auth(api):
+    token = api.post("/auth/register",
+                     json={"email": "h@example.com", "password": "password123"}).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_health_shape_and_no_secret_leak(api, auth):
+    resp = api.get("/api/health", headers=auth)
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
@@ -32,7 +39,11 @@ def test_health_shape_and_no_secret_leak(api):
         isinstance(v, bool) for v in data["providers"].values())
 
 
-def test_health_is_public(api):
-    # 無 Authorization 也可讀（監控用），但不含任何使用者資料
-    data = api.get("/api/health").json()
-    assert "users" in data["store"]
+def test_health_without_login_only_reports_liveness(api):
+    # 無 Authorization 可讀（監控探針用），但不暴露組態與統計
+    assert api.get("/api/health").json() == {"status": "ok", "version": "2.0.0"}
+
+
+def test_health_with_invalid_token_is_treated_as_anonymous(api):
+    data = api.get("/api/health", headers={"Authorization": "Bearer nope"}).json()
+    assert set(data) == {"status", "version"}
