@@ -4,6 +4,7 @@ memory 與 agent 走模組級注入點（測試替身）；agent 需 GROQ_API_KE
 未設定時回 503（與 OAuth provider 降級同一慣例）。
 """
 import threading
+from collections import OrderedDict
 
 from typing import Annotated
 
@@ -144,30 +145,54 @@ def evaluate(body: EvalBody, user=Depends(get_current_user)):
 
 
 # ---- 工具代理 ----
-_agent = None
+# 待辦與行事曆是個人資料：每位使用者各有一份工具狀態（獨立資料夾），
+# 不能共用同一個 TaskManager，否則 A 的 list_tasks 會看到 B 的待辦。
+_agent_override = None          # 測試注入：設定後所有使用者共用這個替身
+_agents = OrderedDict()         # user_id -> ToolAgent（LRU）
 _agent_lock = threading.Lock()
+_MAX_CACHED_AGENTS = 128
 
 
-def get_tool_agent():
-    global _agent
+def _build_agent(user_id):
+    from src.agent.tool_agent import ToolAgent
+    from src.llm.groq_client import GroqClient
+    from src.store import get_store as _get_store
+    from src.tools.builtins import build_default_registry
+    from src.tools.calendar_ics import CalendarExporter
+    from src.tools.task_manager import TaskManager
+
+    user_dir = config.DATA_DIR / "users" / str(int(user_id))
+    user_dir.mkdir(parents=True, exist_ok=True)
+    llm = GroqClient()
+    registry = build_default_registry(
+        store=_get_store().vector,
+        task_manager=TaskManager(path=user_dir / "tasks.json"),
+        calendar=CalendarExporter(out_dir=user_dir),
+    )
+    return ToolAgent(llm.client, registry, llm.model)
+
+
+def get_tool_agent(user_id):
     with _agent_lock:
-        if _agent is None:
-            if not config.GROQ_API_KEY:
-                raise HTTPException(status_code=503, detail="未設定 GROQ_API_KEY，代理不可用")
-            from src.agent.tool_agent import ToolAgent
-            from src.llm.groq_client import GroqClient
-            from src.store import get_store as _get_store
-            from src.tools.builtins import build_default_registry
-            llm = GroqClient()
-            registry = build_default_registry(store=_get_store().vector)
-            _agent = ToolAgent(llm.client, registry, llm.model)
-    return _agent
+        if _agent_override is not None:
+            return _agent_override
+        if not config.GROQ_API_KEY:
+            raise HTTPException(status_code=503, detail="未設定 GROQ_API_KEY，代理不可用")
+        agent = _agents.get(user_id)
+        if agent is None:
+            agent = _agents[user_id] = _build_agent(user_id)
+            while len(_agents) > _MAX_CACHED_AGENTS:
+                _agents.popitem(last=False)
+        else:
+            _agents.move_to_end(user_id)
+        return agent
 
 
 def set_tool_agent(agent):
     """測試注入；回傳先前實例。"""
-    global _agent
-    prev, _agent = _agent, agent
+    global _agent_override
+    prev, _agent_override = _agent_override, agent
+    _agents.clear()
     return prev
 
 
@@ -178,5 +203,5 @@ class AgentBody(BaseModel):
 
 @router.post("/agent", dependencies=[Depends(llm_limit)])
 def run_agent(body: AgentBody, user=Depends(get_current_user)):
-    answer = get_tool_agent().run(body.message, max_steps=body.max_steps)
+    answer = get_tool_agent(user["id"]).run(body.message, max_steps=body.max_steps)
     return {"answer": answer}
