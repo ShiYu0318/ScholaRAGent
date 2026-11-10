@@ -9,7 +9,7 @@ A Full-Stack Open-Source Academic Research Assistant Platform Powered by Agentic
 [![CI](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/tests-600%2B%20passing-brightgreen.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
-[![React](https://img.shields.io/badge/react-18-61dafb.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/api-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
@@ -93,7 +93,7 @@ to "here is my draft with its references" stays in one place. See
 | --- | --- |
 | [Groq API key](https://console.groq.com) | Generation, summarization, LLM routing (free tier works) |
 | Docker, or Python 3.13 + [`uv`](https://github.com/astral-sh/uv) | Running the stack |
-| Node.js 22+ | Frontend development only |
+| Node.js 22+ | Frontend development only (the Docker build uses Node 26) |
 | [Discord bot token](https://discord.com/developers/applications) | The Discord interface only |
 
 ### Option 1 — Docker Compose
@@ -1117,7 +1117,7 @@ backend/                 Python backend — run all uv commands from here
     memory/  notify/  db/  bot/
   tests/                 offline test modules + tests/e2e (demo server and UI journey)
   data/                  Generated index, metadata, SQLite database
-frontend/                React 18 + Vite + TypeScript, no component library
+frontend/                React 19 + Vite + TypeScript, no component library
   src/pages/             15 route components
   src/components/        Shell, CommandPalette, ResearchTrail, NextStep, Paper (row,
                          drawer, add-to-project), ScopePicker, SaveDocument, ProjectForm,
