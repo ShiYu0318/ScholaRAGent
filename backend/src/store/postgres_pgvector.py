@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS users (
     discord_id    TEXT,
     display_name  TEXT,
     locale        TEXT DEFAULT 'en',
+    token_version INTEGER DEFAULT 0,
     created_at    TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS feeds (
@@ -192,6 +193,9 @@ class PostgresPgvectorStore(Store):
         for stmt in _SCHEMA.split(";"):
             if stmt.strip():
                 self._conn.execute(stmt)
+        # 既有資料庫補欄位
+        self._conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0")
         self._embedder = embedder
         self._shim = _VectorShim(self)
         self.logger.info("Postgres+pgvector store 就緒")
@@ -249,7 +253,8 @@ class PostgresPgvectorStore(Store):
         return self._one(f"SELECT * FROM users WHERE {field} = %s", (str(value),))
 
     def update_user(self, user_id, **fields):
-        allowed = {"password_hash", "display_name", "locale", *_USER_OAUTH_FIELDS}
+        allowed = {"password_hash", "display_name", "locale", "token_version",
+                   *_USER_OAUTH_FIELDS}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if updates:
             sets = ", ".join(f"{k} = %s" for k in updates)

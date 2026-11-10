@@ -225,3 +225,59 @@ def test_oauth_start_sets_httponly_nonce_cookie(api, monkeypatch):
     resp = api.get("/auth/oauth/github", follow_redirects=False)
     cookie = resp.headers["set-cookie"].lower()
     assert "oauth_nonce=" in cookie and "httponly" in cookie and "samesite=lax" in cookie
+
+
+def _auth(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_change_password_requires_current_password(api):
+    token = _register(api).json()["token"]
+    resp = api.patch("/auth/me", json={"password": "new-password-1"}, headers=_auth(token))
+    assert resp.status_code == 403
+    resp = api.patch("/auth/me", headers=_auth(token),
+                     json={"password": "new-password-1", "current_password": "nope-nope"})
+    assert resp.status_code == 403
+
+
+def test_change_password_revokes_old_tokens_and_returns_new_one(api):
+    old = _register(api).json()["token"]
+    resp = api.patch("/auth/me", headers=_auth(old),
+                     json={"password": "new-password-1", "current_password": "password123"})
+    assert resp.status_code == 200
+    new = resp.json()["token"]
+    assert api.get("/auth/me", headers=_auth(old)).status_code == 401
+    assert api.get("/auth/me", headers=_auth(new)).status_code == 200
+    login = api.post("/auth/login",
+                     json={"email": "u@example.com", "password": "new-password-1"})
+    assert login.status_code == 200
+
+
+def test_logout_all_revokes_tokens(api):
+    token = _register(api).json()["token"]
+    assert api.post("/auth/logout-all", headers=_auth(token)).status_code == 200
+    assert api.get("/auth/me", headers=_auth(token)).status_code == 401
+
+
+def test_profile_update_does_not_need_password(api):
+    token = _register(api).json()["token"]
+    resp = api.patch("/auth/me", json={"display_name": "New Name"}, headers=_auth(token))
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "New Name"
+    assert "token" not in resp.json()
+
+
+def test_existing_database_gains_token_version_column(tmp_path, fake_embedder):
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE"
+                 " NOT NULL, password_hash TEXT, google_sub TEXT, github_id TEXT,"
+                 " discord_id TEXT, display_name TEXT, locale TEXT DEFAULT 'en',"
+                 " created_at TEXT NOT NULL)")
+    conn.execute("INSERT INTO users (email, created_at) VALUES ('old@example.com', 'x')")
+    conn.commit()
+    conn.close()
+    store = SqliteFaissStore(db_path=path, embedder=fake_embedder)
+    assert store.get_user_by_email("old@example.com")["token_version"] == 0
+    store.close()

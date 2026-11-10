@@ -36,10 +36,15 @@ class UpdateMeBody(BaseModel):
     display_name: str | None = None
     locale: str | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    current_password: str | None = Field(default=None, max_length=128)
+
+
+def _issue_token(user):
+    return auth_lib.create_token(user["id"], ver=int(user.get("token_version") or 0))
 
 
 def _token_response(user):
-    return {"token": auth_lib.create_token(user["id"]), "user": public_user(user)}
+    return {"token": _issue_token(user), "user": public_user(user)}
 
 
 @router.post("/register", status_code=201, dependencies=[Depends(register_limit)])
@@ -77,10 +82,27 @@ def update_me(body: UpdateMeBody, user=Depends(get_current_user),
         fields["display_name"] = body.display_name
     if body.locale is not None:
         fields["locale"] = body.locale
-    if body.password is not None:
+    password_changed = body.password is not None
+    if password_changed:
+        # 已有密碼者必須先證明知道目前密碼：token 被竊時不能直接改密碼接管帳號
+        if user["password_hash"] and not auth_lib.verify_password(
+                body.current_password or "", user["password_hash"]):
+            raise HTTPException(status_code=403, detail="目前密碼不正確")
         fields["password_hash"] = auth_lib.hash_password(body.password)
+        fields["token_version"] = int(user.get("token_version") or 0) + 1
     updated = store.update_user(user["id"], **fields) if fields else user
-    return public_user(updated)
+    result = public_user(updated)
+    if password_changed:
+        # 其他裝置的 token 全數失效；回傳新 token 讓目前裝置維持登入
+        result["token"] = _issue_token(updated)
+    return result
+
+
+@router.post("/logout-all")
+def logout_all(user=Depends(get_current_user), store: Store = Depends(get_store)):
+    """登出所有裝置：遞增 token_version，使先前簽發的 token 全部失效。"""
+    store.update_user(user["id"], token_version=int(user.get("token_version") or 0) + 1)
+    return {"ok": True}
 
 
 @router.get("/providers")
@@ -198,5 +220,5 @@ def _oauth_finish(provider, code, payload, store):
         except ValueError:
             raise HTTPException(status_code=409, detail="帳號建立衝突，請改用 email 登入")
 
-    token = auth_lib.create_token(user["id"])
+    token = _issue_token(store.get_user(user["id"]))
     return RedirectResponse(f"{config.FRONTEND_URL}/#/auth/callback?token={token}")
