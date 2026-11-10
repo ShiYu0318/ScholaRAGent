@@ -69,12 +69,27 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # 選填，提高 GitHub API 額�
 X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "")  # X (Twitter) API v2，需付費方案
 
 # --- Web API / 認證 ---
+# development（預設）或 production；production 會強制檢查安全相關設定
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
 # JWT_SECRET 未設定時每次啟動隨機產生（重啟後舊 token 失效，僅適合本機開發）
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 預設 7 天
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# 部署在反向代理後方時設 1，才信任 X-Forwarded-For / X-Forwarded-Proto
+TRUST_PROXY = os.getenv("TRUST_PROXY", "0") in ("1", "true", "True")
+# 請求 body 大小上限（bytes），預設 1 MB
+MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(1024 * 1024)))
+# Swagger / ReDoc：development 預設開，production 預設關
+_docs_default = "0" if APP_ENV == "production" else "1"
+API_DOCS_ENABLED = os.getenv("API_DOCS_ENABLED", _docs_default) in ("1", "true", "True")
+# 限流（行程內滑動視窗）
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "1") in ("1", "true", "True")
+RATE_LIMIT_LOGIN_PER_MIN = int(os.getenv("RATE_LIMIT_LOGIN_PER_MIN", "10"))
+RATE_LIMIT_REGISTER_PER_HOUR = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "20"))
+RATE_LIMIT_LLM_PER_MIN = int(os.getenv("RATE_LIMIT_LLM_PER_MIN", "30"))
+RATE_LIMIT_HEAVY_PER_MIN = int(os.getenv("RATE_LIMIT_HEAVY_PER_MIN", "6"))
 # OAuth（金鑰未設定則該登入方式自動隱藏）
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")

@@ -1,5 +1,5 @@
 """洞察端點：趨勢偵測、週報、使用者閱讀分析。"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 
 from src.api.deps import get_current_user
 from src.api.services.product import get_product_service
@@ -15,7 +15,7 @@ def trends(granularity: str = Query(default="month", pattern="^(month|year)$"),
 
 
 @router.get("/trends/{keyword}")
-def keyword_trend(keyword: str,
+def keyword_trend(keyword: str = Path(min_length=1, max_length=80),
                   granularity: str = Query(default="month", pattern="^(month|year)$"),
                   user=Depends(get_current_user)):
     return get_product_service().keyword_series(keyword, granularity=granularity)

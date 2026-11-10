@@ -39,3 +39,26 @@ def test_calendar_tool_registered(tmp_path, monkeypatch):
     assert "add_calendar_event" in reg.names()
     out = reg.execute("add_calendar_event", {"title": "Review", "date": "2026-07-11"})
     assert "已建立行事曆事件" in out
+
+
+def test_save_event_rejects_path_traversal_in_date(tmp_path):
+    out = tmp_path / "user"
+    exp = CalendarExporter(out_dir=out)
+    msg = exp.save_event("x", "../../evil")
+    assert "失敗" in msg
+    assert not list(tmp_path.rglob("*.ics"))
+
+
+def test_build_ics_rejects_line_injection():
+    import pytest
+    with pytest.raises(ValueError):
+        build_ics("x", "2026-07-10\r\nATTENDEE:mailto:a@b.c")
+    with pytest.raises(ValueError):
+        build_ics("x", "2026-07-10", time="09:30\r\nX-EVIL:1")
+    ics = build_ics("title\r\nATTENDEE:evil", "2026-07-10")
+    assert "\r\nATTENDEE" not in ics
+
+
+def test_save_event_does_not_reveal_server_path(tmp_path):
+    msg = CalendarExporter(out_dir=tmp_path).save_event("Demo", "2026-07-10")
+    assert str(tmp_path) not in msg

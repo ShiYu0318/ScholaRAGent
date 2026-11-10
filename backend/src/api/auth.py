@@ -3,6 +3,8 @@
 Python 3.13 環境直接用 bcrypt 與 PyJWT（passlib/python-jose 相容性差）。
 JWT_SECRET 未設定時以行程隨機值代替：重啟即失效，只適合本機開發。
 """
+import base64
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -19,20 +21,50 @@ _ALGO = "HS256"
 _EPHEMERAL_SECRET = secrets.token_urlsafe(32)
 
 
+MIN_SECRET_LENGTH = 32
+
+
 def _secret():
     return config.JWT_SECRET or _EPHEMERAL_SECRET
 
 
+def check_production_config():
+    """production 啟動前的安全檢查；不合格直接拒絕啟動，而不是帶著弱設定上線。"""
+    if config.APP_ENV != "production":
+        if not config.JWT_SECRET:
+            logger.warning("JWT_SECRET 未設定：使用行程隨機金鑰，重啟後所有登入失效（僅適合本機開發）")
+        return
+    problems = []
+    if len(config.JWT_SECRET) < MIN_SECRET_LENGTH:
+        problems.append(f"JWT_SECRET 必須設定且至少 {MIN_SECRET_LENGTH} 個字元")
+    if "*" in config.CORS_ORIGINS:
+        problems.append("CORS_ORIGINS 不可為 *")
+    if problems:
+        raise RuntimeError("production 設定不安全：" + "；".join(problems))
+
+
 # ---- 密碼 ----
+def _bcrypt_input(password: str) -> bytes:
+    """bcrypt 只吃前 72 bytes（bcrypt 5 起超過會丟例外）。
+
+    超長密碼先做 SHA-256 再 base64（44 bytes），保留完整熵；72 bytes 以內維持
+    原樣，與既有雜湊相容。
+    """
+    raw = password.encode("utf-8")
+    if len(raw) <= 72:
+        return raw
+    return base64.b64encode(hashlib.sha256(raw).digest())
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+    return bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     if not password_hash:
         return False
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("ascii"))
+        return bcrypt.checkpw(_bcrypt_input(password), password_hash.encode("ascii"))
     except ValueError:
         return False
 
@@ -123,7 +155,8 @@ def authorize_url(provider, state):
 def exchange_code(provider, code):
     """用授權碼換 access token 並抓使用者資料。
 
-    回傳 {"sub": 供應商使用者 id, "email": ..., "name": ...}；失敗丟 RuntimeError。
+    回傳 {"sub": 供應商使用者 id, "email": ..., "email_verified": bool, "name": ...}；
+    失敗丟例外。email_verified 為 False 時呼叫端不得用該 email 綁定既有帳號。
     """
     cid, csecret = provider_credentials(provider)
     meta = PROVIDERS[provider]
@@ -153,18 +186,26 @@ def exchange_code(provider, code):
 
         if provider == "google":
             return {"sub": data["sub"], "email": data.get("email"),
+                    "email_verified": bool(data.get("email_verified")),
                     "name": data.get("name")}
         if provider == "github":
-            email = data.get("email")
-            if not email:
-                emails = client.get(
-                    "https://api.github.com/user/emails",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                ).json()
-                primary = next((e for e in emails if e.get("primary")), None)
-                email = (primary or (emails[0] if emails else {})).get("email")
-            return {"sub": str(data["id"]), "email": email,
+            # /user 的 email 是公開顯示用，不保證已驗證；一律以 /user/emails 為準
+            email, verified = None, False
+            resp_emails = client.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            emails = resp_emails.json() if resp_emails.status_code == 200 else []
+            if isinstance(emails, list):
+                candidates = [e for e in emails if isinstance(e, dict) and e.get("verified")]
+                chosen = next((e for e in candidates if e.get("primary")),
+                              candidates[0] if candidates else None)
+                if chosen:
+                    email, verified = chosen.get("email"), True
+            return {"sub": str(data["id"]), "email": email or data.get("email"),
+                    "email_verified": verified,
                     "name": data.get("name") or data.get("login")}
         # discord
         return {"sub": str(data["id"]), "email": data.get("email"),
+                "email_verified": bool(data.get("verified")),
                 "name": data.get("global_name") or data.get("username")}

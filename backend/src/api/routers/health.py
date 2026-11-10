@@ -1,15 +1,21 @@
-"""健康監控端點：儲存統計、排程器狀態、外部服務金鑰狀態（僅布林，不洩漏值）。"""
+"""健康監控端點。
+
+未登入只回存活狀態（給負載平衡器 / 監控探針用）；儲存統計、排程器狀態、
+外部服務是否已設定等細節只給已登入使用者，避免對外暴露系統組態。
+"""
 from fastapi import APIRouter, Depends
 
 from src import config
-from src.api.deps import get_store
+from src.api.deps import get_optional_user, get_store
 from src.store.base import Store
 
 router = APIRouter(prefix="/api", tags=["health"])
 
 
 @router.get("/health")
-def health(store: Store = Depends(get_store)):
+def health(user=Depends(get_optional_user), store: Store = Depends(get_store)):
+    if user is None:
+        return {"status": "ok", "version": "2.0.0"}
     from src.scheduler import get_scheduler_manager
     providers = {
         "groq": bool(config.GROQ_API_KEY),

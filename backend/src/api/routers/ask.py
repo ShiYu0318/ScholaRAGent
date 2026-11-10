@@ -5,9 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.ask import get_ask_service
 from src.store.base import Store
+from src.utils.logger import get_logger
+
+logger = get_logger("api.ask")
 
 router = APIRouter(prefix="/api", tags=["ask"])
 
@@ -22,7 +26,7 @@ def sse(payload):
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(llm_limit)])
 def ask(body: AskBody, user=Depends(get_current_user), store: Store = Depends(get_store)):
     service = get_ask_service()
     question = body.question.strip()
@@ -42,8 +46,10 @@ def ask(body: AskBody, user=Depends(get_current_user), store: Store = Depends(ge
         yield sse({"type": "conversation", "conversation_id": conv["id"]})
         try:
             papers = service.retrieve(question, k=body.k)
-        except Exception as e:
-            yield sse({"type": "error", "message": f"檢索失敗：{e}"})
+        except Exception:
+            # 例外內容可能含路徑、連線字串或上游回應：只記在伺服器端
+            logger.exception("檢索失敗")
+            yield sse({"type": "error", "message": "檢索失敗，請稍後再試"})
             return
 
         parts = []
@@ -51,8 +57,9 @@ def ask(body: AskBody, user=Depends(get_current_user), store: Store = Depends(ge
             for delta in service.stream(question, papers):
                 parts.append(delta)
                 yield sse({"type": "token", "text": delta})
-        except Exception as e:
-            yield sse({"type": "error", "message": f"生成失敗：{e}"})
+        except Exception:
+            logger.exception("生成失敗")
+            yield sse({"type": "error", "message": "生成失敗，請稍後再試"})
 
         citations = service.citations(papers)
         message = store.add_message(conv["id"], "assistant", "".join(parts),

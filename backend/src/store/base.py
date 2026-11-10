@@ -143,6 +143,10 @@ class Store(ABC):
         """產生（或回傳既有）分享 token。"""
 
     @abstractmethod
+    def unshare_conversation(self, conv_id, user_id):
+        """撤銷分享（清除 token），回傳是否成功；之後重新分享會得到新 token。"""
+
+    @abstractmethod
     def get_shared_conversation(self, token):
         """依分享 token 取對話（含 messages），不存在回傳 None。"""
 

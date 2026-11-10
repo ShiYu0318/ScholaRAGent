@@ -4,11 +4,16 @@ memory 與 agent 走模組級注入點（測試替身）；agent 需 GROQ_API_KE
 未設定時回 503（與 OAuth provider 降級同一慣例）。
 """
 import threading
+from collections import OrderedDict
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src import config
+from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.validators import PaperId
 from src.api.deps import get_current_user, get_store
 from src.rag.evaluation import faithfulness, precision_at_k, recall, reciprocal_rank
 from src.store.base import Store
@@ -52,14 +57,19 @@ def set_memory(memory):
     return prev
 
 
+MAX_MEMORY_ITEMS = 500
+
+
 class MemoryBody(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
-    kind: str = Field(default="note", max_length=40)
+    kind: str = Field(default="note", pattern=r"^[a-z][a-z0-9_-]{0,39}$")
 
 
 @router.get("/memory")
-def list_memory(kind: str | None = None, contains: str | None = None,
-                limit: int = 50, user=Depends(get_current_user)):
+def list_memory(kind: str | None = Query(default=None, max_length=40),
+                contains: str | None = Query(default=None, max_length=200),
+                limit: int = Query(default=50, ge=1, le=200),
+                user=Depends(get_current_user)):
     items = get_memory().filter(str(user["id"]), kind=kind,
                                 contains=contains, limit=limit)
     return {"items": items}
@@ -67,6 +77,9 @@ def list_memory(kind: str | None = None, contains: str | None = None,
 
 @router.post("/memory", status_code=201)
 def add_memory(body: MemoryBody, user=Depends(get_current_user)):
+    memory = get_memory()
+    if len(memory.all(str(user["id"]))) >= MAX_MEMORY_ITEMS:
+        raise HTTPException(status_code=422, detail=f"記憶最多 {MAX_MEMORY_ITEMS} 則")
     return get_memory().add(str(user["id"]), body.content, kind=body.kind)
 
 
@@ -97,17 +110,18 @@ def set_judge_llm(llm):
 class EvalBody(BaseModel):
     engine: str = Field(default="offline", pattern="^(offline|judge)$")
     # offline：確定性排序/重疊指標
-    retrieved_ids: list[str] | None = None
-    relevant_ids: list[str] | None = None
+    retrieved_ids: list[PaperId] | None = Field(default=None, max_length=200)
+    relevant_ids: list[PaperId] | None = Field(default=None, max_length=200)
     k: int = Field(default=4, ge=1, le=50)
     # judge：RAGAS 式 LLM-as-judge 指標
-    question: str | None = None
-    answer: str | None = None
-    contexts: list[str] | None = None
-    ground_truth: str | None = None
+    question: str | None = Field(default=None, max_length=4000)
+    answer: str | None = Field(default=None, max_length=20000)
+    contexts: list[Annotated[str, Field(max_length=8000)]] | None = Field(
+        default=None, max_length=20)
+    ground_truth: str | None = Field(default=None, max_length=20000)
 
 
-@router.post("/eval")
+@router.post("/eval", dependencies=[Depends(llm_limit)])
 def evaluate(body: EvalBody, user=Depends(get_current_user)):
     if body.engine == "judge":
         if not (body.question and body.answer and body.contexts):
@@ -131,30 +145,54 @@ def evaluate(body: EvalBody, user=Depends(get_current_user)):
 
 
 # ---- 工具代理 ----
-_agent = None
+# 待辦與行事曆是個人資料：每位使用者各有一份工具狀態（獨立資料夾），
+# 不能共用同一個 TaskManager，否則 A 的 list_tasks 會看到 B 的待辦。
+_agent_override = None          # 測試注入：設定後所有使用者共用這個替身
+_agents = OrderedDict()         # user_id -> ToolAgent（LRU）
 _agent_lock = threading.Lock()
+_MAX_CACHED_AGENTS = 128
 
 
-def get_tool_agent():
-    global _agent
+def _build_agent(user_id):
+    from src.agent.tool_agent import ToolAgent
+    from src.llm.groq_client import GroqClient
+    from src.store import get_store as _get_store
+    from src.tools.builtins import build_default_registry
+    from src.tools.calendar_ics import CalendarExporter
+    from src.tools.task_manager import TaskManager
+
+    user_dir = config.DATA_DIR / "users" / str(int(user_id))
+    user_dir.mkdir(parents=True, exist_ok=True)
+    llm = GroqClient()
+    registry = build_default_registry(
+        store=_get_store().vector,
+        task_manager=TaskManager(path=user_dir / "tasks.json"),
+        calendar=CalendarExporter(out_dir=user_dir),
+    )
+    return ToolAgent(llm.client, registry, llm.model)
+
+
+def get_tool_agent(user_id):
     with _agent_lock:
-        if _agent is None:
-            if not config.GROQ_API_KEY:
-                raise HTTPException(status_code=503, detail="未設定 GROQ_API_KEY，代理不可用")
-            from src.agent.tool_agent import ToolAgent
-            from src.llm.groq_client import GroqClient
-            from src.store import get_store as _get_store
-            from src.tools.builtins import build_default_registry
-            llm = GroqClient()
-            registry = build_default_registry(store=_get_store().vector)
-            _agent = ToolAgent(llm.client, registry, llm.model)
-    return _agent
+        if _agent_override is not None:
+            return _agent_override
+        if not config.GROQ_API_KEY:
+            raise HTTPException(status_code=503, detail="未設定 GROQ_API_KEY，代理不可用")
+        agent = _agents.get(user_id)
+        if agent is None:
+            agent = _agents[user_id] = _build_agent(user_id)
+            while len(_agents) > _MAX_CACHED_AGENTS:
+                _agents.popitem(last=False)
+        else:
+            _agents.move_to_end(user_id)
+        return agent
 
 
 def set_tool_agent(agent):
     """測試注入；回傳先前實例。"""
-    global _agent
-    prev, _agent = _agent, agent
+    global _agent_override
+    prev, _agent_override = _agent_override, agent
+    _agents.clear()
     return prev
 
 
@@ -163,7 +201,7 @@ class AgentBody(BaseModel):
     max_steps: int = Field(default=5, ge=1, le=10)
 
 
-@router.post("/agent")
+@router.post("/agent", dependencies=[Depends(llm_limit)])
 def run_agent(body: AgentBody, user=Depends(get_current_user)):
-    answer = get_tool_agent().run(body.message, max_steps=body.max_steps)
+    answer = get_tool_agent(user["id"]).run(body.message, max_steps=body.max_steps)
     return {"answer": answer}

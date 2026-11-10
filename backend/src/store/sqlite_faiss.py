@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from src import config
 from src.store.base import Store
 from src.utils.logger import get_logger
+from src.utils.text_safety import safe_link
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
     discord_id    TEXT,
     display_name  TEXT,
     locale        TEXT DEFAULT 'en',
+    token_version INTEGER DEFAULT 0,
     created_at    TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS feeds (
@@ -168,10 +170,22 @@ class SqliteFaissStore(Store):
         self._conn.execute("PRAGMA busy_timeout = 5000")
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.executescript(_SCHEMA)
+        self._migrate()
         self._conn.commit()
         self._embedder = embedder
         self._vs = vector_store
         self.logger.info(f"SQLite+FAISS store 就緒：{self.path}")
+
+    # 既有資料庫補欄位（CREATE TABLE IF NOT EXISTS 不會更動舊表）
+    _MIGRATIONS = (
+        ("users", "token_version", "INTEGER DEFAULT 0"),
+    )
+
+    def _migrate(self):
+        for table, column, ddl in self._MIGRATIONS:
+            cols = {r["name"] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+            if column not in cols:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
     # 向量庫延遲初始化：載 embedding 模型很重，只有用到檢索才建
     @property
@@ -225,7 +239,8 @@ class SqliteFaissStore(Store):
         return dict(row) if row else None
 
     def update_user(self, user_id, **fields):
-        allowed = {"password_hash", "display_name", "locale", *_USER_OAUTH_FIELDS}
+        allowed = {"password_hash", "display_name", "locale", "token_version",
+                   *_USER_OAUTH_FIELDS}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if updates:
             sets = ", ".join(f"{k} = ?" for k in updates)
@@ -252,7 +267,7 @@ class SqliteFaissStore(Store):
                     """,
                     {
                         "id": p["id"], "title": p.get("title", ""), "abstract": p.get("abstract", ""),
-                        "authors": p.get("authors", ""), "link": p.get("link", ""),
+                        "authors": p.get("authors", ""), "link": safe_link(p.get("link", "")),
                         "published": p.get("published", ""), "summary": p.get("summary"),
                         "source": p.get("source", "arxiv"), "created_at": _now(),
                     },
@@ -482,7 +497,15 @@ class SqliteFaissStore(Store):
         self._write("UPDATE conversations SET share_token = ? WHERE id = ?", (token, conv_id))
         return token
 
+    def unshare_conversation(self, conv_id, user_id):
+        cur = self._write(
+            "UPDATE conversations SET share_token = NULL WHERE id = ? AND user_id = ?",
+            (conv_id, user_id))
+        return cur.rowcount > 0
+
     def get_shared_conversation(self, token):
+        if not token:
+            return None
         row = self._conn.execute(
             "SELECT * FROM conversations WHERE share_token = ?", (token,)
         ).fetchone()

@@ -1,5 +1,5 @@
 """對話端點：列表/搜尋、讀取、改名、刪除、分享。"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from src import config
@@ -14,10 +14,11 @@ class RenameBody(BaseModel):
 
 
 @router.get("/conversations")
-def list_conversations(query: str | None = None, limit: int = 50,
+def list_conversations(query: str | None = Query(default=None, max_length=200),
+                       limit: int = Query(default=50, ge=1, le=200),
                        user=Depends(get_current_user),
                        store: Store = Depends(get_store)):
-    items = store.list_conversations(user["id"], query=query, limit=min(limit, 200))
+    items = store.list_conversations(user["id"], query=query, limit=limit)
     return {"items": items}
 
 
@@ -55,8 +56,16 @@ def share_conversation(conv_id: int, user=Depends(get_current_user),
     return {"token": token, "url": f"{config.FRONTEND_URL}/#/shared/{token}"}
 
 
+@router.delete("/conversations/{conv_id}/share", status_code=204)
+def unshare_conversation(conv_id: int, user=Depends(get_current_user),
+                         store: Store = Depends(get_store)):
+    """撤銷分享：原連結立即失效。"""
+    if not store.unshare_conversation(conv_id, user["id"]):
+        raise HTTPException(status_code=404, detail="對話不存在")
+
+
 @router.get("/shared/{token}")
-def shared_conversation(token: str, store: Store = Depends(get_store)):
+def shared_conversation(token: str = Path(max_length=64), store: Store = Depends(get_store)):
     """公開分享頁：不需登入，只露出標題與訊息。"""
     conv = store.get_shared_conversation(token)
     if conv is None:

@@ -6,11 +6,15 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src import config
+from src.api import auth as auth_lib
+from src.api.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
+from src.api.ratelimit import RateLimiter
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
 from src.api.routers import conversations as conversations_router
@@ -25,6 +29,9 @@ from src.api.routers import notifications as notifications_router
 from src.api.routers import reminders as reminders_router
 from src.api.routers import research as research_router
 from src.api.routers import write as write_router
+from src.utils.logger import get_logger
+
+logger = get_logger("api")
 
 
 @asynccontextmanager
@@ -40,19 +47,33 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    auth_lib.check_production_config()
     app = FastAPI(
         title="ScholaRAGent API",
         description="AI 研究副駕：RAG 問答、GraphRAG、深度研究、文獻工具、個人化推送。",
         version="2.0.0",
         lifespan=_lifespan,
+        docs_url="/docs" if config.API_DOCS_ENABLED else None,
+        redoc_url="/redoc" if config.API_DOCS_ENABLED else None,
+        openapi_url="/openapi.json" if config.API_DOCS_ENABLED else None,
     )
+    app.state.limiter = RateLimiter()
+    app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
+    # 最後加入＝最外層：連 CORS 預檢與 413 回應都帶安全標頭
+    app.add_middleware(SecurityHeadersMiddleware)
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception):
+        # 未預期的例外：細節只進日誌，用戶端拿到固定訊息
+        logger.error(f"未處理的例外 {request.method} {request.url.path}", exc_info=exc)
+        return JSONResponse(status_code=500, content={"detail": "伺服器內部錯誤"})
+
     app.include_router(auth_router.router)
     app.include_router(health_router.router)
     app.include_router(ask_router.router)

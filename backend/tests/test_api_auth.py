@@ -23,6 +23,14 @@ def _register(api, email="u@example.com", password="password123"):
     return api.post("/auth/register", json={"email": email, "password": password})
 
 
+def _start_state(api, provider="github"):
+    """走 /auth/oauth/{provider} 取得 state（TestClient 會保留 nonce cookie）。"""
+    from urllib.parse import parse_qs, urlparse
+    resp = api.get(f"/auth/oauth/{provider}", follow_redirects=False)
+    assert resp.status_code == 307
+    return parse_qs(urlparse(resp.headers["location"]).query)["state"][0]
+
+
 def test_register_returns_token_and_user(api):
     resp = _register(api)
     assert resp.status_code == 201
@@ -127,9 +135,8 @@ def test_oauth_callback_login_creates_user(api, monkeypatch):
     monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
     monkeypatch.setattr(auth_lib, "exchange_code",
                         lambda provider, code: {"sub": "gh-1", "email": "gh@example.com",
-                                                "name": "GH"})
-    state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=5,
-                                  provider="github", mode="login")
+                                                "email_verified": True, "name": "GH"})
+    state = _start_state(api)
     resp = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
                    follow_redirects=False)
     assert resp.status_code == 307
@@ -139,8 +146,138 @@ def test_oauth_callback_login_creates_user(api, monkeypatch):
     user = store.get_user_by_oauth("github_id", "gh-1")
     assert user["email"] == "gh@example.com"
 
-    # 再次登入：不重複建帳號
+    # 再次登入：不重複建帳號（nonce 一次性，需重新發起）
+    state = _start_state(api)
     resp2 = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
                     follow_redirects=False)
     assert resp2.status_code == 307
     assert store.stats()["users"] == 1
+
+
+def _oauth_login(api, monkeypatch, profile):
+    """以 stub 的供應商資料跑一次 GitHub 登入 callback。"""
+    from src import config
+    from src.api import auth as auth_lib
+
+    monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
+    monkeypatch.setattr(auth_lib, "exchange_code", lambda provider, code: profile)
+    state = _start_state(api)
+    return api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
+                   follow_redirects=False)
+
+
+def test_oauth_unverified_email_cannot_claim_existing_account(api, monkeypatch):
+    _register(api, email="victim@example.com")
+    resp = _oauth_login(api, monkeypatch, {
+        "sub": "gh-evil", "email": "victim@example.com",
+        "email_verified": False, "name": "Evil"})
+    assert "error=email_unverified" in resp.headers["location"]
+    store = store_module.get_store()
+    assert store.get_user_by_email("victim@example.com")["github_id"] is None
+    assert store.get_user_by_oauth("github_id", "gh-evil") is None
+
+
+def test_oauth_verified_email_links_existing_account(api, monkeypatch):
+    _register(api, email="me@example.com")
+    resp = _oauth_login(api, monkeypatch, {
+        "sub": "gh-me", "email": "me@example.com",
+        "email_verified": True, "name": "Me"})
+    assert "token=" in resp.headers["location"]
+    store = store_module.get_store()
+    assert store.get_user_by_email("me@example.com")["github_id"] == "gh-me"
+    assert store.stats()["users"] == 1
+
+
+def test_oauth_unverified_email_new_account_uses_placeholder(api, monkeypatch):
+    resp = _oauth_login(api, monkeypatch, {
+        "sub": "gh-new", "email": "someone@example.com",
+        "email_verified": False, "name": "New"})
+    assert "token=" in resp.headers["location"]
+    store = store_module.get_store()
+    assert store.get_user_by_email("someone@example.com") is None
+    assert store.get_user_by_oauth("github_id", "gh-new")["email"].endswith(
+        "@users.noreply.scholaragent")
+
+
+def test_oauth_state_from_another_browser_is_rejected(api, monkeypatch):
+    """login CSRF：攻擊者把自己的 callback 連結丟給受害者，受害者瀏覽器沒有對應 nonce。"""
+    from src import config
+    from src.api import auth as auth_lib
+
+    monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
+    monkeypatch.setattr(auth_lib, "exchange_code",
+                        lambda provider, code: {"sub": "gh-atk", "email": "a@example.com",
+                                                "email_verified": True, "name": "A"})
+    state = _start_state(api)
+    api.cookies.clear()  # 換一個瀏覽器
+    resp = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
+                   follow_redirects=False)
+    assert resp.status_code == 400
+    assert store_module.get_store().stats()["users"] == 0
+
+
+def test_oauth_start_sets_httponly_nonce_cookie(api, monkeypatch):
+    from src import config
+    monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
+    resp = api.get("/auth/oauth/github", follow_redirects=False)
+    cookie = resp.headers["set-cookie"].lower()
+    assert "oauth_nonce=" in cookie and "httponly" in cookie and "samesite=lax" in cookie
+
+
+def _auth(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_change_password_requires_current_password(api):
+    token = _register(api).json()["token"]
+    resp = api.patch("/auth/me", json={"password": "new-password-1"}, headers=_auth(token))
+    assert resp.status_code == 403
+    resp = api.patch("/auth/me", headers=_auth(token),
+                     json={"password": "new-password-1", "current_password": "nope-nope"})
+    assert resp.status_code == 403
+
+
+def test_change_password_revokes_old_tokens_and_returns_new_one(api):
+    old = _register(api).json()["token"]
+    resp = api.patch("/auth/me", headers=_auth(old),
+                     json={"password": "new-password-1", "current_password": "password123"})
+    assert resp.status_code == 200
+    new = resp.json()["token"]
+    assert api.get("/auth/me", headers=_auth(old)).status_code == 401
+    assert api.get("/auth/me", headers=_auth(new)).status_code == 200
+    login = api.post("/auth/login",
+                     json={"email": "u@example.com", "password": "new-password-1"})
+    assert login.status_code == 200
+
+
+def test_logout_all_revokes_tokens(api):
+    token = _register(api).json()["token"]
+    assert api.post("/auth/logout-all", headers=_auth(token)).status_code == 200
+    assert api.get("/auth/me", headers=_auth(token)).status_code == 401
+
+
+def test_profile_update_does_not_need_password(api):
+    token = _register(api).json()["token"]
+    resp = api.patch("/auth/me", json={"display_name": "New Name"}, headers=_auth(token))
+    assert resp.status_code == 200
+    assert resp.json()["display_name"] == "New Name"
+    assert "token" not in resp.json()
+
+
+def test_existing_database_gains_token_version_column(tmp_path, fake_embedder):
+    import sqlite3
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE"
+                 " NOT NULL, password_hash TEXT, google_sub TEXT, github_id TEXT,"
+                 " discord_id TEXT, display_name TEXT, locale TEXT DEFAULT 'en',"
+                 " created_at TEXT NOT NULL)")
+    conn.execute("INSERT INTO users (email, created_at) VALUES ('old@example.com', 'x')")
+    conn.commit()
+    conn.close()
+    store = SqliteFaissStore(db_path=path, embedder=fake_embedder)
+    assert store.get_user_by_email("old@example.com")["token_version"] == 0
+    store.close()

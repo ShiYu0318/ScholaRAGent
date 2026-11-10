@@ -3,11 +3,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.validators import PaperId
 from src.api.deps import get_current_user
 from src.api.routers.ask import sse
 from src.api.services.research import get_research_service
+from src.utils.logger import get_logger
 
 router = APIRouter(prefix="/api", tags=["research"])
+logger = get_logger("api.research")
 
 
 class TopicBody(BaseModel):
@@ -16,9 +20,13 @@ class TopicBody(BaseModel):
 
 
 class CompareBody(BaseModel):
-    topic: str | None = None
-    paper_ids: list[str] | None = None
+    topic: str | None = Field(default=None, max_length=500)
+    paper_ids: list[PaperId] | None = Field(default=None, max_length=20)
     k: int = Field(default=6, ge=2, le=20)
+
+
+class ExplainBody(BaseModel):
+    paper_id: PaperId
 
 
 class DeepResearchBody(BaseModel):
@@ -27,7 +35,7 @@ class DeepResearchBody(BaseModel):
     k: int = Field(default=4, ge=1, le=10)
 
 
-@router.post("/deepresearch")
+@router.post("/deepresearch", dependencies=[Depends(heavy_limit)])
 def deepresearch(body: DeepResearchBody, _user=Depends(get_current_user)):
     service = get_research_service()
 
@@ -36,20 +44,21 @@ def deepresearch(body: DeepResearchBody, _user=Depends(get_current_user)):
             for event in service.stream_deepresearch(body.topic, max_subs=body.max_subs,
                                                      k=body.k):
                 yield sse(event)
-        except Exception as e:
-            yield sse({"type": "error", "message": f"深度研究失敗：{e}"})
+        except Exception:
+            logger.exception("深度研究失敗")
+            yield sse({"type": "error", "message": "深度研究失敗，請稍後再試"})
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",
                                       "X-Accel-Buffering": "no"})
 
 
-@router.post("/litreview")
+@router.post("/litreview", dependencies=[Depends(llm_limit)])
 def litreview(body: TopicBody, _user=Depends(get_current_user)):
     return get_research_service().litreview(body.topic, k=body.k)
 
 
-@router.post("/compare")
+@router.post("/compare", dependencies=[Depends(llm_limit)])
 def compare(body: CompareBody, _user=Depends(get_current_user)):
     if not body.topic and not body.paper_ids:
         raise HTTPException(status_code=422, detail="需提供 topic 或 paper_ids")
@@ -57,7 +66,7 @@ def compare(body: CompareBody, _user=Depends(get_current_user)):
                                           k=body.k)
 
 
-@router.post("/report")
+@router.post("/report", dependencies=[Depends(llm_limit)])
 def report(body: TopicBody, _user=Depends(get_current_user)):
     return get_research_service().report(body.topic, k=body.k)
 
@@ -69,12 +78,9 @@ def bibtex(body: CompareBody, _user=Depends(get_current_user)):
     return get_research_service().bibtex(topic=body.topic, paper_ids=body.paper_ids)
 
 
-@router.post("/explain")
-def explain(body: dict, _user=Depends(get_current_user)):
-    paper_id = (body or {}).get("paper_id", "")
-    if not paper_id:
-        raise HTTPException(status_code=422, detail="需提供 paper_id")
-    result = get_research_service().explain(paper_id)
+@router.post("/explain", dependencies=[Depends(llm_limit)])
+def explain(body: ExplainBody, _user=Depends(get_current_user)):
+    result = get_research_service().explain(body.paper_id)
     if result is None:
         raise HTTPException(status_code=404, detail="論文不存在")
     return result

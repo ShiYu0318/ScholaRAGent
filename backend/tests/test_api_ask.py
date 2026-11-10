@@ -133,3 +133,57 @@ def test_share_and_public_read(api, auth):
     assert "user_id" not in body
 
     assert api.get("/api/shared/bogus-token").status_code == 404
+
+
+def test_stream_errors_do_not_leak_exception_details(api, auth):
+    class Boom(StubAskService):
+        def retrieve(self, question, k=4):
+            raise RuntimeError("postgresql://air:s3cret@db:5432 connection refused")
+
+    prev = ask_module.set_ask_service(Boom())
+    try:
+        resp = api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    finally:
+        ask_module.set_ask_service(prev)
+    assert "s3cret" not in resp.text and "postgresql" not in resp.text
+    assert '"type": "error"' in resp.text
+
+
+def test_generation_errors_do_not_leak_exception_details(api, auth):
+    class Boom(StubAskService):
+        def stream(self, question, papers):
+            yield "部分"
+            raise RuntimeError("Authorization: Bearer gsk_live_secret")
+
+    prev = ask_module.set_ask_service(Boom())
+    try:
+        resp = api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    finally:
+        ask_module.set_ask_service(prev)
+    assert "gsk_live_secret" not in resp.text
+
+
+def test_share_can_be_revoked(api, auth):
+    api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    conv_id = api.get("/api/conversations", headers=auth).json()["items"][0]["id"]
+    token = api.post(f"/api/conversations/{conv_id}/share", headers=auth).json()["token"]
+    assert api.get(f"/api/shared/{token}").status_code == 200
+
+    assert api.delete(f"/api/conversations/{conv_id}/share", headers=auth).status_code == 204
+    assert api.get(f"/api/shared/{token}").status_code == 404
+    # 重新分享會拿到不同的 token，舊連結不會復活
+    new = api.post(f"/api/conversations/{conv_id}/share", headers=auth).json()["token"]
+    assert new != token
+    assert api.get(f"/api/shared/{token}").status_code == 404
+
+
+def test_cannot_revoke_someone_elses_share(api, auth):
+    api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    conv_id = api.get("/api/conversations", headers=auth).json()["items"][0]["id"]
+    token = api.post(f"/api/conversations/{conv_id}/share", headers=auth).json()["token"]
+    other = api.post("/auth/register",
+                     json={"email": "o@b.c", "password": "password123"}).json()["token"]
+    resp = api.delete(f"/api/conversations/{conv_id}/share",
+                      headers={"Authorization": f"Bearer {other}"})
+    assert resp.status_code == 404
+    assert api.get(f"/api/shared/{token}").status_code == 200

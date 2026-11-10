@@ -1,39 +1,56 @@
 """認證端點：Email+密碼註冊/登入、OAuth（Google/GitHub）、Discord 帳號綁定。"""
-from fastapi import APIRouter, Depends, HTTPException
+import hashlib
+import hmac
+import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from src import config
 from src.api import auth as auth_lib
 from src.api.deps import get_current_user, get_store, public_user
+from src.api.ratelimit import limit_ip
 from src.store.base import Store
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+login_limit = limit_ip("login", config.RATE_LIMIT_LOGIN_PER_MIN, 60)
+register_limit = limit_ip("register", config.RATE_LIMIT_REGISTER_PER_HOUR, 3600)
+oauth_limit = limit_ip("oauth", 30, 60)
+
+
+LOCALE_PATTERN = r"^[a-z]{2}(-[A-Za-z]{2,4})?$"
 
 
 class RegisterBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    display_name: str | None = None
-    locale: str = "en"
+    display_name: str | None = Field(default=None, max_length=80)
+    locale: str = Field(default="en", pattern=LOCALE_PATTERN)
 
 
 class LoginBody(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class UpdateMeBody(BaseModel):
-    display_name: str | None = None
-    locale: str | None = None
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    locale: str | None = Field(default=None, pattern=LOCALE_PATTERN)
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    current_password: str | None = Field(default=None, max_length=128)
+
+
+def _issue_token(user):
+    return auth_lib.create_token(user["id"], ver=int(user.get("token_version") or 0))
 
 
 def _token_response(user):
-    return {"token": auth_lib.create_token(user["id"]), "user": public_user(user)}
+    return {"token": _issue_token(user), "user": public_user(user)}
 
 
-@router.post("/register", status_code=201)
+@router.post("/register", status_code=201, dependencies=[Depends(register_limit)])
 def register(body: RegisterBody, store: Store = Depends(get_store)):
     try:
         user = store.create_user(
@@ -47,7 +64,7 @@ def register(body: RegisterBody, store: Store = Depends(get_store)):
     return _token_response(user)
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(login_limit)])
 def login(body: LoginBody, store: Store = Depends(get_store)):
     user = store.get_user_by_email(body.email)
     if not user or not auth_lib.verify_password(body.password, user["password_hash"]):
@@ -68,10 +85,27 @@ def update_me(body: UpdateMeBody, user=Depends(get_current_user),
         fields["display_name"] = body.display_name
     if body.locale is not None:
         fields["locale"] = body.locale
-    if body.password is not None:
+    password_changed = body.password is not None
+    if password_changed:
+        # 已有密碼者必須先證明知道目前密碼：token 被竊時不能直接改密碼接管帳號
+        if user["password_hash"] and not auth_lib.verify_password(
+                body.current_password or "", user["password_hash"]):
+            raise HTTPException(status_code=403, detail="目前密碼不正確")
         fields["password_hash"] = auth_lib.hash_password(body.password)
+        fields["token_version"] = int(user.get("token_version") or 0) + 1
     updated = store.update_user(user["id"], **fields) if fields else user
-    return public_user(updated)
+    result = public_user(updated)
+    if password_changed:
+        # 其他裝置的 token 全數失效；回傳新 token 讓目前裝置維持登入
+        result["token"] = _issue_token(updated)
+    return result
+
+
+@router.post("/logout-all")
+def logout_all(user=Depends(get_current_user), store: Store = Depends(get_store)):
+    """登出所有裝置：遞增 token_version，使先前簽發的 token 全部失效。"""
+    store.update_user(user["id"], token_version=int(user.get("token_version") or 0) + 1)
+    return {"ok": True}
 
 
 @router.get("/providers")
@@ -87,22 +121,48 @@ def _require_provider(provider):
         raise HTTPException(status_code=404, detail=f"{provider} 登入未啟用（缺金鑰）")
 
 
-@router.get("/oauth/{provider}")
+_NONCE_COOKIE = "oauth_nonce"
+
+
+def _nonce_hash(nonce):
+    return hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+
+
+def _begin_oauth(response, user_id, provider, mode):
+    """簽發 state 並把 nonce 存進 HttpOnly cookie，讓 callback 能確認是同一個瀏覽器。
+
+    state 只帶 nonce 的雜湊：即使授權網址外洩，也無法反推 cookie 值。
+    """
+    nonce = secrets.token_urlsafe(24)
+    state = auth_lib.create_token(user_id, purpose="oauth_state", expires_minutes=10,
+                                  provider=provider, mode=mode, nh=_nonce_hash(nonce))
+    response.set_cookie(
+        _NONCE_COOKIE, nonce, max_age=600, httponly=True, samesite="lax",
+        secure=config.API_PUBLIC_URL.startswith("https://"), path="/auth",
+    )
+    return auth_lib.authorize_url(provider, state)
+
+
+def _nonce_matches(request, payload):
+    nonce = request.cookies.get(_NONCE_COOKIE, "")
+    expected = payload.get("nh") or ""
+    return bool(nonce and expected) and hmac.compare_digest(_nonce_hash(nonce), expected)
+
+
+@router.get("/oauth/{provider}", dependencies=[Depends(oauth_limit)])
 def oauth_start(provider: str):
     """導向供應商授權頁（登入模式）。"""
     _require_provider(provider)
-    state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=10,
-                                  provider=provider, mode="login")
-    return RedirectResponse(auth_lib.authorize_url(provider, state))
+    response = RedirectResponse("/")
+    response.headers["location"] = _begin_oauth(response, 0, provider, "login")
+    return response
 
 
 @router.post("/discord/link")
-def discord_link(user=Depends(get_current_user)):
+def discord_link(response: Response, user=Depends(get_current_user)):
     """回傳 Discord 綁定授權網址（前端自行導向）。"""
     _require_provider("discord")
-    state = auth_lib.create_token(user["id"], purpose="oauth_state", expires_minutes=10,
-                                  provider="discord", mode="link")
-    return {"url": auth_lib.authorize_url("discord", state)}
+    return {"url": _begin_oauth(response, user["id"], "discord", "link")}
 
 
 @router.delete("/discord/link")
@@ -111,13 +171,20 @@ def discord_unlink(user=Depends(get_current_user), store: Store = Depends(get_st
     return public_user(updated)
 
 
-@router.get("/oauth/{provider}/callback")
-def oauth_callback(provider: str, code: str = "", state: str = "",
+@router.get("/oauth/{provider}/callback", dependencies=[Depends(oauth_limit)])
+def oauth_callback(provider: str, request: Request, code: str = "", state: str = "",
                    store: Store = Depends(get_store)):
     _require_provider(provider)
     payload = auth_lib.decode_token(state, purpose="oauth_state")
-    if not payload or payload.get("provider") != provider or not code:
+    if (not payload or payload.get("provider") != provider or not code
+            or not _nonce_matches(request, payload)):
         raise HTTPException(status_code=400, detail="OAuth state 無效或已過期")
+    response = _oauth_finish(provider, code, payload, store)
+    response.delete_cookie(_NONCE_COOKIE, path="/auth")
+    return response
+
+
+def _oauth_finish(provider, code, payload, store):
 
     try:
         profile = auth_lib.exchange_code(provider, code)
@@ -134,19 +201,27 @@ def oauth_callback(provider: str, code: str = "", state: str = "",
         store.update_user(uid, **{id_field: profile["sub"]})
         return RedirectResponse(f"{config.FRONTEND_URL}/#/auth/callback?linked={provider}")
 
-    # 登入模式：先比對供應商 id，其次同 email 帳號自動綁定，否則新建
+    # 登入模式：先比對供應商 id；其次「已驗證」的同 email 帳號自動綁定；否則新建。
+    # 未驗證的 email 不可用來認領既有帳號（否則可在供應商端冒用他人 email 接管）。
     user = store.get_user_by_oauth(id_field, profile["sub"])
-    if not user and profile.get("email"):
-        user = store.get_user_by_email(profile["email"])
-        if user:
+    email = profile.get("email")
+    verified = bool(email) and bool(profile.get("email_verified"))
+    if not user and email:
+        existing = store.get_user_by_email(email)
+        if existing and not verified:
+            return RedirectResponse(
+                f"{config.FRONTEND_URL}/#/auth/callback?error=email_unverified")
+        if existing:
+            user = existing
             store.update_user(user["id"], **{id_field: profile["sub"]})
     if not user:
-        email = profile.get("email") or f"{provider}-{profile['sub']}@users.noreply.scholaragent"
+        new_email = email if verified else (
+            f"{provider}-{profile['sub']}@users.noreply.scholaragent")
         try:
-            user = store.create_user(email=email, display_name=profile.get("name"),
+            user = store.create_user(email=new_email, display_name=profile.get("name"),
                                      **{id_field: profile["sub"]})
         except ValueError:
             raise HTTPException(status_code=409, detail="帳號建立衝突，請改用 email 登入")
 
-    token = auth_lib.create_token(user["id"])
+    token = _issue_token(store.get_user(user["id"]))
     return RedirectResponse(f"{config.FRONTEND_URL}/#/auth/callback?token={token}")

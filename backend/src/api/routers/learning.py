@@ -1,7 +1,11 @@
 """學習路徑與技能端點：主題生成路徑（LLM/檢索式）、勾選進度、技能等級。"""
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.validators import BoundedJson
 from src.api.deps import get_current_user, get_store
 from src.api.services.product import get_product_service
 from src.store.base import Store
@@ -15,9 +19,9 @@ class PathBody(BaseModel):
 
 
 class PathUpdateBody(BaseModel):
-    topic: str | None = None
-    items: list[dict] | None = None
-    progress: dict | None = None
+    topic: str | None = Field(default=None, min_length=1, max_length=200)
+    items: Annotated[list[dict] | None, Field(max_length=50), BoundedJson(40_000)] = None
+    progress: Annotated[dict | None, BoundedJson(8_000)] = None
 
 
 class SkillBody(BaseModel):
@@ -30,7 +34,7 @@ def list_paths(user=Depends(get_current_user), store: Store = Depends(get_store)
     return {"items": store.list_learning_paths(user["id"])}
 
 
-@router.post("/learning-paths", status_code=201)
+@router.post("/learning-paths", status_code=201, dependencies=[Depends(llm_limit)])
 def create_path(body: PathBody, user=Depends(get_current_user)):
     return get_product_service().generate_learning_path(
         user["id"], body.topic, steps=body.steps)

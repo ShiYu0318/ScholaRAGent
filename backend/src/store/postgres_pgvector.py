@@ -17,6 +17,7 @@ from src import config
 from src.rag.vector_store import _lexical_overlap, _tokenize
 from src.store.base import Store
 from src.utils.logger import get_logger
+from src.utils.text_safety import safe_link
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS users (
     discord_id    TEXT,
     display_name  TEXT,
     locale        TEXT DEFAULT 'en',
+    token_version INTEGER DEFAULT 0,
     created_at    TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS feeds (
@@ -192,6 +194,9 @@ class PostgresPgvectorStore(Store):
         for stmt in _SCHEMA.split(";"):
             if stmt.strip():
                 self._conn.execute(stmt)
+        # 既有資料庫補欄位
+        self._conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0")
         self._embedder = embedder
         self._shim = _VectorShim(self)
         self.logger.info("Postgres+pgvector store 就緒")
@@ -249,7 +254,8 @@ class PostgresPgvectorStore(Store):
         return self._one(f"SELECT * FROM users WHERE {field} = %s", (str(value),))
 
     def update_user(self, user_id, **fields):
-        allowed = {"password_hash", "display_name", "locale", *_USER_OAUTH_FIELDS}
+        allowed = {"password_hash", "display_name", "locale", "token_version",
+                   *_USER_OAUTH_FIELDS}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if updates:
             sets = ", ".join(f"{k} = %s" for k in updates)
@@ -274,7 +280,7 @@ class PostgresPgvectorStore(Store):
                 """,
                 {
                     "id": p["id"], "title": p.get("title", ""), "abstract": p.get("abstract", ""),
-                    "authors": p.get("authors", ""), "link": p.get("link", ""),
+                    "authors": p.get("authors", ""), "link": safe_link(p.get("link", "")),
                     "published": p.get("published", ""), "summary": p.get("summary"),
                     "source": p.get("source", "arxiv"), "created_at": _now(),
                 },
@@ -538,7 +544,15 @@ class PostgresPgvectorStore(Store):
                    (token, conv_id))
         return token
 
+    def unshare_conversation(self, conv_id, user_id):
+        cur = self._exec(
+            "UPDATE conversations SET share_token = NULL WHERE id = %s AND user_id = %s",
+            (conv_id, user_id))
+        return cur.rowcount > 0
+
     def get_shared_conversation(self, token):
+        if not token:
+            return None
         conv = self._one("SELECT * FROM conversations WHERE share_token = %s", (token,))
         if not conv:
             return None

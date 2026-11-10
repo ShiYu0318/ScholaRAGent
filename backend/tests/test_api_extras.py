@@ -148,3 +148,39 @@ def test_agent_with_stub_and_degradation(api, auth, monkeypatch):
         assert resp.status_code == 503
     finally:
         extras_module.set_tool_agent(prev)
+
+
+def test_agent_tool_state_is_isolated_per_user(tmp_path, monkeypatch):
+    """每位使用者的待辦各自獨立：B 看不到 A 新增的待辦。"""
+    from src import config
+
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "GROQ_API_KEY", "test-key")
+
+    class FakeLLM:
+        client, model = object(), "m"
+
+    monkeypatch.setattr("src.llm.groq_client.GroqClient", lambda *a, **k: FakeLLM())
+
+    class FakeVector:
+        papers = []
+
+        def search(self, query, k=3):
+            return []
+
+    class FakeStore:
+        vector = FakeVector()
+
+    monkeypatch.setattr("src.store.get_store", lambda: FakeStore())
+    prev = extras_module.set_tool_agent(None)
+    try:
+        a = extras_module.get_tool_agent(1)
+        b = extras_module.get_tool_agent(2)
+        assert a is not b
+        assert extras_module.get_tool_agent(1) is a
+        a.registry.execute("add_task", {"title": "A 的秘密待辦"})
+        assert "A 的秘密待辦" in a.registry.execute("list_tasks", {})
+        assert "A 的秘密待辦" not in b.registry.execute("list_tasks", {})
+        assert (tmp_path / "users" / "1" / "tasks.json").exists()
+    finally:
+        extras_module.set_tool_agent(prev)

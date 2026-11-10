@@ -154,3 +154,21 @@ def test_exports(api, auth):
 def test_library_requires_auth(api):
     assert api.get("/api/papers").status_code == 401
     assert api.post("/api/daily", json={}).status_code == 401
+
+
+@pytest.mark.parametrize("url", [
+    "http://127.0.0.1:8000/rss", "http://localhost/rss", "http://169.254.169.254/latest",
+    "http://10.0.0.8/feed.xml", "http://db.internal/feed", "http://[::1]/rss",
+])
+def test_feed_url_pointing_inside_the_network_is_rejected(api, auth, url):
+    assert api.post("/api/feeds", json={"url": url}, headers=auth).status_code == 422
+
+
+def test_feed_count_is_capped_per_user(api, auth, monkeypatch):
+    from src.api.routers import feeds
+    monkeypatch.setattr(feeds, "MAX_FEEDS_PER_USER", 2)
+    for i in range(2):
+        assert api.post("/api/feeds", json={"url": f"https://example.com/{i}"},
+                        headers=auth).status_code == 201
+    assert api.post("/api/feeds", json={"url": "https://example.com/x"},
+                    headers=auth).status_code == 422

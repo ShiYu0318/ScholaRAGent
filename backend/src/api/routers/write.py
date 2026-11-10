@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user
 from src.api.services.research import get_research_service
 
@@ -15,7 +16,7 @@ class WriteBody(BaseModel):
     topic: str = Field(default="", max_length=500)
 
 
-@router.post("/{tool}")
+@router.post("/{tool}", dependencies=[Depends(llm_limit)])
 def write_tool(tool: str, body: WriteBody, _user=Depends(get_current_user)):
     if tool not in TOOLS:
         raise HTTPException(status_code=404, detail=f"未知寫作工具：{tool}")

@@ -16,7 +16,14 @@ def _user_from_bearer(authorization, store):
     payload = auth_lib.decode_token(authorization.split(" ", 1)[1].strip())
     if not payload:
         return None
-    return store.get_user(int(payload["sub"]))
+    try:
+        user = store.get_user(int(payload["sub"]))
+    except (TypeError, ValueError):
+        return None
+    # 改密碼或「登出所有裝置」會遞增 token_version，舊 token 自此失效
+    if not user or int(payload.get("ver", 0)) != int(user.get("token_version") or 0):
+        return None
+    return user
 
 
 def get_current_user(authorization: str = Header(default=None),
