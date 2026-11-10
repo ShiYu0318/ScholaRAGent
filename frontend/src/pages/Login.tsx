@@ -1,18 +1,18 @@
-// 登入 / 註冊頁：Email+密碼與 OAuth（依 /auth/providers 顯示可用按鈕）。
-import { Box, Button, Flash, FormControl, Heading, Text, TextInput } from "@primer/react";
-import { MarkGithubIcon, TelescopeIcon } from "@primer/octicons-react";
+// 登入 / 註冊。左側用研究軌跡說明這個產品在做什麼，右側是表單。
 import { useQuery } from "@tanstack/react-query";
+import { BookOpen } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate } from "react-router-dom";
 
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { STAGES } from "../lib/types";
+import { Button, Field, Input, Notice } from "../ui";
 
 interface Providers {
   google: boolean;
   github: boolean;
-  discord: boolean;
 }
 
 export function Login() {
@@ -25,11 +25,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const providers = useQuery({
-    queryKey: ["auth", "providers"],
-    queryFn: () => api<Providers>("/auth/providers"),
-  });
-
+  const providers = useQuery({ queryKey: ["auth", "providers"], queryFn: () => api<Providers>("/auth/providers") });
   if (user) return <Navigate to="/" replace />;
 
   const submit = async (e: FormEvent) => {
@@ -40,115 +36,76 @@ export function Login() {
       if (mode === "signin") await login(email, password);
       else await register(email, password, displayName);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("common.error"));
+      setError(err instanceof ApiError
+        ? (err.status === 429 ? t("auth.tooMany") : err.message)
+        : t("common.error"));
     } finally {
       setBusy(false);
     }
   };
+  const oauth = [providers.data?.google && "google", providers.data?.github && "github"].filter(Boolean) as string[];
 
   return (
-    <Box
-      minHeight="100vh"
-      bg="canvas.default"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      p={3}
-    >
-      <Box width={340}>
-        <Box display="flex" flexDirection="column" alignItems="center" mb={4}>
-          <TelescopeIcon size={40} />
-          <Heading as="h1" sx={{ fontSize: 4, mt: 2 }}>
-            {t("app.name")}
-          </Heading>
-          <Text sx={{ color: "fg.muted", fontSize: 1 }}>{t("app.tagline")}</Text>
-        </Box>
+    <div className="auth">
+      <aside className="auth-aside">
+        <div className="brand" style={{ padding: 0 }}><BookOpen size={20} className="brand-mark" />ScholaRAGent</div>
+        <div>
+          <h1 style={{ fontSize: 34, maxWidth: "16ch" }}>{t("auth.pitch")}</h1>
+          <p className="t-muted" style={{ marginTop: 12, maxWidth: "44ch", fontSize: 15 }}>{t("auth.pitchBody")}</p>
+          <div className="trail trail-compact" style={{ marginTop: 40, maxWidth: 460 }} aria-hidden>
+            {STAGES.map((s, i) => (
+              <div key={s} className="trail-step" data-done={i < 2} data-next={i === 2}>
+                <span className="trail-name">{t(`trail.${s}`)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <span className="t-meta">{t("auth.footer")}</span>
+      </aside>
 
-        {error && (
-          <Flash variant="danger" sx={{ mb: 3 }}>
-            {error}
-          </Flash>
-        )}
-
-        <Box
-          as="form"
-          onSubmit={submit}
-          sx={{
-            bg: "canvas.subtle",
-            border: "1px solid",
-            borderColor: "border.default",
-            borderRadius: 2,
-            p: 3,
-            display: "grid",
-            gap: 3,
-          }}
-        >
-          <FormControl required>
-            <FormControl.Label>{t("auth.email")}</FormControl.Label>
-            <TextInput
-              block
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </FormControl>
-          <FormControl required>
-            <FormControl.Label>{t("auth.password")}</FormControl.Label>
-            <TextInput
-              block
-              type="password"
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </FormControl>
-          {mode === "signup" && (
-            <FormControl>
-              <FormControl.Label>{t("auth.displayName")}</FormControl.Label>
-              <TextInput
-                block
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </FormControl>
+      <main className="auth-form">
+        <div className="auth-card stack">
+          <div>
+            <h2>{mode === "signin" ? t("auth.signIn") : t("auth.signUp")}</h2>
+            <p className="t-meta" style={{ marginTop: 4 }}>
+              {mode === "signin" ? t("auth.noAccount") : t("auth.haveAccount")}{" "}
+              <button type="button" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
+                      style={{ border: 0, background: "none", padding: 0, color: "var(--pencil)", cursor: "pointer", fontWeight: 600 }}>
+                {mode === "signin" ? t("auth.signUp") : t("auth.signIn")}
+              </button>
+            </p>
+          </div>
+          {error && <Notice tone="danger">{error}</Notice>}
+          <form className="stack" onSubmit={submit}>
+            {mode === "signup" && (
+              <Field label={t("auth.displayName")}>
+                {(id) => <Input id={id} value={displayName} maxLength={80} autoComplete="name" onChange={(e) => setDisplayName(e.target.value)} />}
+              </Field>
+            )}
+            <Field label={t("auth.email")}>
+              {(id) => <Input id={id} type="email" required autoComplete="email" value={email} autoFocus onChange={(e) => setEmail(e.target.value)} />}
+            </Field>
+            <Field label={t("auth.password")} hint={mode === "signup" ? t("settings.passwordHint") : undefined}>
+              {(id) => <Input id={id} type="password" required minLength={mode === "signup" ? 8 : undefined} maxLength={128}
+                              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                              value={password} onChange={(e) => setPassword(e.target.value)} />}
+            </Field>
+            <Button type="submit" variant="primary" size="lg" block loading={busy}>
+              {mode === "signin" ? t("auth.signIn") : t("auth.createAccount")}
+            </Button>
+          </form>
+          {oauth.length > 0 && (
+            <>
+              <div className="row t-meta"><hr className="divider grow" />{t("auth.or")}<hr className="divider grow" /></div>
+              {oauth.map((p) => (
+                <a key={p} className="btn btn-lg btn-block" href={`/auth/oauth/${p}`}>
+                  {t("auth.continueWith", { provider: p === "google" ? "Google" : "GitHub" })}
+                </a>
+              ))}
+            </>
           )}
-          <Button type="submit" variant="primary" block disabled={busy}>
-            {mode === "signin" ? t("auth.submitSignIn") : t("auth.submitSignUp")}
-          </Button>
-        </Box>
-
-        {(providers.data?.google || providers.data?.github) && (
-          <Box mt={3} display="grid" sx={{ gap: 2 }}>
-            <Text sx={{ color: "fg.muted", fontSize: 0, textAlign: "center" }}>
-              {t("auth.continueWith")}
-            </Text>
-            {providers.data?.google && (
-              <Button block onClick={() => (window.location.href = "/auth/oauth/google")}>
-                {t("auth.google")}
-              </Button>
-            )}
-            {providers.data?.github && (
-              <Button
-                block
-                leadingVisual={MarkGithubIcon}
-                onClick={() => (window.location.href = "/auth/oauth/github")}
-              >
-                {t("auth.github")}
-              </Button>
-            )}
-          </Box>
-        )}
-
-        <Box mt={3} textAlign="center">
-          <Button
-            variant="invisible"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-          >
-            {mode === "signin" ? t("auth.switchToSignUp") : t("auth.switchToSignIn")}
-          </Button>
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </main>
+    </div>
   );
 }
