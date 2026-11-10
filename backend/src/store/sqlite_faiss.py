@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from src import config
 from src.store.base import Store
+from src.store.workspace import WORKSPACE_SCHEMA
 from src.utils.logger import get_logger
 from src.utils.text_safety import safe_link
 
@@ -170,6 +171,8 @@ class SqliteFaissStore(Store):
         self._conn.execute("PRAGMA busy_timeout = 5000")
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.executescript(_SCHEMA)
+        self._conn.executescript(
+            WORKSPACE_SCHEMA.format(pk="INTEGER PRIMARY KEY AUTOINCREMENT"))
         self._migrate()
         self._conn.commit()
         self._embedder = embedder
@@ -179,6 +182,7 @@ class SqliteFaissStore(Store):
     # 既有資料庫補欄位（CREATE TABLE IF NOT EXISTS 不會更動舊表）
     _MIGRATIONS = (
         ("users", "token_version", "INTEGER DEFAULT 0"),
+        ("conversations", "project_id", "INTEGER"),
     )
 
     def _migrate(self):
@@ -200,6 +204,16 @@ class SqliteFaissStore(Store):
             cur = self._conn.execute(sql, params)
             self._conn.commit()
             return cur
+
+    # WorkspaceMixin 的轉接層
+    def _q(self, sql, params=()):
+        return [dict(r) for r in self._conn.execute(sql, params).fetchall()]
+
+    def _x(self, sql, params=()):
+        return self._write(sql, params).rowcount
+
+    def _ins(self, sql, params=()):
+        return self._write(sql, params).lastrowid
 
     # ---- 使用者 ----
     def create_user(self, email, password_hash=None, display_name=None,
@@ -404,11 +418,12 @@ class SqliteFaissStore(Store):
         return cur.rowcount > 0
 
     # ---- 對話 ----
-    def create_conversation(self, user_id, title=""):
+    def create_conversation(self, user_id, title="", project_id=None):
         now = _now()
         cur = self._write(
-            "INSERT INTO conversations (user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (user_id, title, now, now),
+            "INSERT INTO conversations (user_id, title, project_id, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (user_id, title, project_id, now, now),
         )
         return self._conversation_row(cur.lastrowid)
 
@@ -418,23 +433,22 @@ class SqliteFaissStore(Store):
         ).fetchone()
         return dict(row) if row else None
 
-    def list_conversations(self, user_id, query=None, limit=50):
+    def list_conversations(self, user_id, query=None, limit=50, project_id=None):
+        where, params = ["c.user_id = ?"], [user_id]
+        if project_id is not None:
+            where.append("c.project_id = ?")
+            params.append(project_id)
+        join = ""
         if query:
             like = f"%{query}%"
-            rows = self._conn.execute(
-                """
-                SELECT DISTINCT c.* FROM conversations c
-                LEFT JOIN messages m ON m.conversation_id = c.id
-                WHERE c.user_id = ? AND (c.title LIKE ? OR m.content LIKE ?)
-                ORDER BY c.updated_at DESC LIMIT ?
-                """,
-                (user_id, like, like, limit),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
-                (user_id, limit),
-            ).fetchall()
+            join = "LEFT JOIN messages m ON m.conversation_id = c.id"
+            where.append("(c.title LIKE ? OR m.content LIKE ?)")
+            params += [like, like]
+        rows = self._conn.execute(
+            f"SELECT DISTINCT c.* FROM conversations c {join}"
+            f" WHERE {' AND '.join(where)} ORDER BY c.updated_at DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
         return [dict(r) for r in rows]
 
     def get_conversation(self, conv_id, user_id=None):
