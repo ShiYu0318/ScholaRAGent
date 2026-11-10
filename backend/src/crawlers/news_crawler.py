@@ -7,15 +7,21 @@ import re
 from email.utils import parsedate_to_datetime
 
 import requests
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from src.utils.logger import get_logger
+from src.utils.safe_http import UnsafeURLError, safe_get
+from src.utils.text_safety import safe_link
 
 _UA = "ScholaRAGent/1.0 (news reader)"
 _DEFAULT_FEEDS = (
     "https://news.google.com/rss/search?q=artificial+intelligence&hl=en-US&gl=US&ceid=US:en",
 )
 _TAG = re.compile(r"<[^>]+>")
+MAX_ITEMS_PER_FEED = 50
+MAX_TITLE = 500
+MAX_ABSTRACT = 5000
 
 
 def _strip_html(text):
@@ -37,9 +43,10 @@ def _parse_date(raw):
 
 def parse_rss(xml_text):
     """把 RSS/Atom XML 解析成統一 item 清單（純函式，離線可測）。"""
+    # defusedxml：拒絕實體展開（billion laughs）與外部實體（XXE）
     try:
         root = ET.fromstring(xml_text)
-    except ET.ParseError:
+    except (ET.ParseError, DefusedXmlException, ValueError):
         return []
 
     items = []
@@ -51,12 +58,14 @@ def parse_rss(xml_text):
         pub = item.findtext("pubDate", "")
         if not title:
             continue
+        if len(items) >= MAX_ITEMS_PER_FEED:
+            break
         items.append({
             "id": _short_id(link),
-            "title": title.strip(),
-            "abstract": _strip_html(desc) or title.strip(),
+            "title": title.strip()[:MAX_TITLE],
+            "abstract": (_strip_html(desc) or title.strip())[:MAX_ABSTRACT],
             "authors": "",
-            "link": link.strip(),
+            "link": safe_link(link),
             "published": _parse_date(pub),
             "source": "news",
         })
@@ -64,15 +73,21 @@ def parse_rss(xml_text):
 
 
 class NewsCrawler:
-    def __init__(self, feeds=None, session=None):
+    def __init__(self, feeds=None, session=None, resolver=None):
         self.logger = get_logger(self.__class__.__name__)
         self.feeds = list(feeds) if feeds else list(_DEFAULT_FEEDS)
         self.session = session or requests
+        self._resolver = resolver  # 測試注入 DNS 解析
 
     def fetch_feed(self, url, timeout=10):
+        """抓一個 feed。URL 可能來自使用者，一律走 safe_get（擋內網位址、限制大小）。"""
         try:
-            resp = self.session.get(url, headers={"User-Agent": _UA}, timeout=timeout)
-            return parse_rss(resp.text)
+            text = safe_get(url, headers={"User-Agent": _UA}, timeout=timeout,
+                            session=self.session, resolver=self._resolver)
+            return parse_rss(text)
+        except UnsafeURLError as e:
+            self.logger.warning(f"拒絕抓取 feed（{url}）：{e}")
+            return []
         except Exception as e:
             self.logger.error(f"抓取新聞 feed 失敗（{url}）：{e}")
             return []

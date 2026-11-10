@@ -559,6 +559,15 @@ nvtx = [
 ]
 
 [[package]]
+name = "defusedxml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
+]
+
+[[package]]
 name = "discord-py"
 version = "2.7.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1944,71 +1953,6 @@ wheels = [
 ]
 
 [[package]]
-name = "scholaragent"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "apscheduler" },
-    { name = "arxiv" },
-    { name = "authlib" },
-    { name = "bcrypt" },
-    { name = "bs4" },
-    { name = "discord-py" },
-    { name = "faiss-cpu" },
-    { name = "fastapi" },
-    { name = "feedparser" },
-    { name = "httpx" },
-    { name = "openai" },
-    { name = "pgvector" },
-    { name = "playwright" },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pydantic", extra = ["email"] },
-    { name = "pyjwt" },
-    { name = "pymupdf" },
-    { name = "pytest-playwright" },
-    { name = "python-dotenv" },
-    { name = "python-pptx" },
-    { name = "requests" },
-    { name = "sentence-transformers" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "python-docx" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "apscheduler", specifier = ">=3.11.3" },
-    { name = "arxiv", specifier = ">=2.4.1" },
-    { name = "authlib", specifier = ">=1.7.2" },
-    { name = "bcrypt", specifier = ">=5.0.0" },
-    { name = "bs4", specifier = ">=0.0.2" },
-    { name = "discord-py", specifier = ">=2.4.0" },
-    { name = "faiss-cpu", specifier = ">=1.9.0" },
-    { name = "fastapi", specifier = ">=0.139.0" },
-    { name = "feedparser", specifier = ">=6.0.12" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "openai", specifier = ">=2.26.0" },
-    { name = "pgvector", specifier = ">=0.4.2" },
-    { name = "playwright", specifier = ">=1.58.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
-    { name = "pydantic", extras = ["email"], specifier = ">=2.12.5" },
-    { name = "pyjwt", specifier = ">=2.13.0" },
-    { name = "pymupdf", specifier = ">=1.27.1" },
-    { name = "pytest-playwright", specifier = ">=0.7.2" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "python-pptx", specifier = ">=1.0.2" },
-    { name = "requests", specifier = ">=2.32.5" },
-    { name = "sentence-transformers", specifier = ">=3.3.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.49.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "python-docx", specifier = ">=1.2.0" }]
-
-[[package]]
 name = "regex"
 version = "2026.5.9"
 source = { registry = "https://pypi.org/simple" }
@@ -2129,6 +2073,73 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/05/e5/cb4b713c8a93469e3c5be7c3f8d77d307e65fe89673e731f5c2bfd0a9237/safetensors-0.7.0-cp38-abi3-win32.whl", hash = "sha256:c74af94bf3ac15ac4d0f2a7c7b4663a15f8c2ab15ed0fc7531ca61d0835eccba", size = 326423, upload-time = "2025-11-19T15:18:45.74Z" },
     { url = "https://files.pythonhosted.org/packages/5d/e6/ec8471c8072382cb91233ba7267fd931219753bb43814cbc71757bfd4dab/safetensors-0.7.0-cp38-abi3-win_amd64.whl", hash = "sha256:d1239932053f56f3456f32eb9625590cc7582e905021f94636202a864d470755", size = 341380, upload-time = "2025-11-19T15:18:44.427Z" },
 ]
+
+[[package]]
+name = "scholaragent"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "apscheduler" },
+    { name = "arxiv" },
+    { name = "authlib" },
+    { name = "bcrypt" },
+    { name = "bs4" },
+    { name = "defusedxml" },
+    { name = "discord-py" },
+    { name = "faiss-cpu" },
+    { name = "fastapi" },
+    { name = "feedparser" },
+    { name = "httpx" },
+    { name = "openai" },
+    { name = "pgvector" },
+    { name = "playwright" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic", extra = ["email"] },
+    { name = "pyjwt" },
+    { name = "pymupdf" },
+    { name = "pytest-playwright" },
+    { name = "python-dotenv" },
+    { name = "python-pptx" },
+    { name = "requests" },
+    { name = "sentence-transformers" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "python-docx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "apscheduler", specifier = ">=3.11.3" },
+    { name = "arxiv", specifier = ">=2.4.1" },
+    { name = "authlib", specifier = ">=1.7.2" },
+    { name = "bcrypt", specifier = ">=5.0.0" },
+    { name = "bs4", specifier = ">=0.0.2" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "discord-py", specifier = ">=2.4.0" },
+    { name = "faiss-cpu", specifier = ">=1.9.0" },
+    { name = "fastapi", specifier = ">=0.139.0" },
+    { name = "feedparser", specifier = ">=6.0.12" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "openai", specifier = ">=2.26.0" },
+    { name = "pgvector", specifier = ">=0.4.2" },
+    { name = "playwright", specifier = ">=1.58.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.12.5" },
+    { name = "pyjwt", specifier = ">=2.13.0" },
+    { name = "pymupdf", specifier = ">=1.27.1" },
+    { name = "pytest-playwright", specifier = ">=0.7.2" },
+    { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "python-pptx", specifier = ">=1.0.2" },
+    { name = "requests", specifier = ">=2.32.5" },
+    { name = "sentence-transformers", specifier = ">=3.3.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.49.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "python-docx", specifier = ">=1.2.0" }]
 
 [[package]]
 name = "scikit-learn"

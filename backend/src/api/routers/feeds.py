@@ -1,4 +1,6 @@
 """RSS 訂閱源與主題訂閱端點（每人自訂）。"""
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -6,19 +8,24 @@ from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.library import get_library_service
 from src.store.base import Store
+from src.utils.safe_http import UnsafeURLError, check_url
 
 router = APIRouter(prefix="/api", tags=["feeds"])
 
 
+MAX_FEEDS_PER_USER = 50
+MAX_SUBSCRIPTIONS_PER_USER = 50
+
+
 class FeedBody(BaseModel):
     url: HttpUrl
-    title: str | None = None
-    category: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    category: str | None = Field(default=None, max_length=80)
 
 
 class FeedUpdateBody(BaseModel):
-    title: str | None = None
-    category: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    category: str | None = Field(default=None, max_length=80)
     enabled: bool | None = None
 
 
@@ -30,8 +37,15 @@ def list_feeds(user=Depends(get_current_user), store: Store = Depends(get_store)
 @router.post("/feeds", status_code=201)
 def add_feed(body: FeedBody, user=Depends(get_current_user),
              store: Store = Depends(get_store)):
+    # 伺服器之後會代抓這個 URL：存入前先擋掉內網/保留位址（抓取時會再查一次 DNS）
     try:
-        return store.add_feed(user["id"], str(body.url), title=body.title,
+        url = check_url(str(body.url), resolve=False)
+    except UnsafeURLError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if len(store.list_feeds(user["id"])) >= MAX_FEEDS_PER_USER:
+        raise HTTPException(status_code=422, detail=f"最多 {MAX_FEEDS_PER_USER} 個 feed")
+    try:
+        return store.add_feed(user["id"], url, title=body.title,
                               category=body.category)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -62,7 +76,8 @@ def refresh_feeds(user=Depends(get_current_user)):
 # ---- 主題訂閱（關鍵字）----
 class SubscriptionBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    keywords: list[str] = Field(min_length=1)
+    keywords: list[Annotated[str, Field(min_length=1, max_length=80)]] = Field(
+        min_length=1, max_length=20)
 
 
 @router.get("/subscriptions")
@@ -74,6 +89,11 @@ def list_subscriptions(user=Depends(get_current_user),
 @router.post("/subscriptions", status_code=201)
 def add_subscription(body: SubscriptionBody, user=Depends(get_current_user),
                      store: Store = Depends(get_store)):
+    existing = store.list_subscriptions(user["id"])
+    if (len(existing) >= MAX_SUBSCRIPTIONS_PER_USER
+            and body.name not in {s["name"] for s in existing}):
+        raise HTTPException(status_code=422,
+                            detail=f"最多 {MAX_SUBSCRIPTIONS_PER_USER} 個訂閱")
     return store.add_subscription(user["id"], body.name, body.keywords)
 
 
