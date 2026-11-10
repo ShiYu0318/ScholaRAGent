@@ -123,7 +123,8 @@ def authorize_url(provider, state):
 def exchange_code(provider, code):
     """用授權碼換 access token 並抓使用者資料。
 
-    回傳 {"sub": 供應商使用者 id, "email": ..., "name": ...}；失敗丟 RuntimeError。
+    回傳 {"sub": 供應商使用者 id, "email": ..., "email_verified": bool, "name": ...}；
+    失敗丟例外。email_verified 為 False 時呼叫端不得用該 email 綁定既有帳號。
     """
     cid, csecret = provider_credentials(provider)
     meta = PROVIDERS[provider]
@@ -153,18 +154,26 @@ def exchange_code(provider, code):
 
         if provider == "google":
             return {"sub": data["sub"], "email": data.get("email"),
+                    "email_verified": bool(data.get("email_verified")),
                     "name": data.get("name")}
         if provider == "github":
-            email = data.get("email")
-            if not email:
-                emails = client.get(
-                    "https://api.github.com/user/emails",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                ).json()
-                primary = next((e for e in emails if e.get("primary")), None)
-                email = (primary or (emails[0] if emails else {})).get("email")
-            return {"sub": str(data["id"]), "email": email,
+            # /user 的 email 是公開顯示用，不保證已驗證；一律以 /user/emails 為準
+            email, verified = None, False
+            resp_emails = client.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            emails = resp_emails.json() if resp_emails.status_code == 200 else []
+            if isinstance(emails, list):
+                candidates = [e for e in emails if isinstance(e, dict) and e.get("verified")]
+                chosen = next((e for e in candidates if e.get("primary")),
+                              candidates[0] if candidates else None)
+                if chosen:
+                    email, verified = chosen.get("email"), True
+            return {"sub": str(data["id"]), "email": email or data.get("email"),
+                    "email_verified": verified,
                     "name": data.get("name") or data.get("login")}
         # discord
         return {"sub": str(data["id"]), "email": data.get("email"),
+                "email_verified": bool(data.get("verified")),
                 "name": data.get("global_name") or data.get("username")}

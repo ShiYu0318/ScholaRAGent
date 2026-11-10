@@ -127,7 +127,7 @@ def test_oauth_callback_login_creates_user(api, monkeypatch):
     monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
     monkeypatch.setattr(auth_lib, "exchange_code",
                         lambda provider, code: {"sub": "gh-1", "email": "gh@example.com",
-                                                "name": "GH"})
+                                                "email_verified": True, "name": "GH"})
     state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=5,
                                   provider="github", mode="login")
     resp = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
@@ -144,3 +144,50 @@ def test_oauth_callback_login_creates_user(api, monkeypatch):
                     follow_redirects=False)
     assert resp2.status_code == 307
     assert store.stats()["users"] == 1
+
+
+def _oauth_login(api, monkeypatch, profile):
+    """以 stub 的供應商資料跑一次 GitHub 登入 callback。"""
+    from src import config
+    from src.api import auth as auth_lib
+
+    monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
+    monkeypatch.setattr(auth_lib, "exchange_code", lambda provider, code: profile)
+    state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=5,
+                                  provider="github", mode="login")
+    return api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
+                   follow_redirects=False)
+
+
+def test_oauth_unverified_email_cannot_claim_existing_account(api, monkeypatch):
+    _register(api, email="victim@example.com")
+    resp = _oauth_login(api, monkeypatch, {
+        "sub": "gh-evil", "email": "victim@example.com",
+        "email_verified": False, "name": "Evil"})
+    assert "error=email_unverified" in resp.headers["location"]
+    store = store_module.get_store()
+    assert store.get_user_by_email("victim@example.com")["github_id"] is None
+    assert store.get_user_by_oauth("github_id", "gh-evil") is None
+
+
+def test_oauth_verified_email_links_existing_account(api, monkeypatch):
+    _register(api, email="me@example.com")
+    resp = _oauth_login(api, monkeypatch, {
+        "sub": "gh-me", "email": "me@example.com",
+        "email_verified": True, "name": "Me"})
+    assert "token=" in resp.headers["location"]
+    store = store_module.get_store()
+    assert store.get_user_by_email("me@example.com")["github_id"] == "gh-me"
+    assert store.stats()["users"] == 1
+
+
+def test_oauth_unverified_email_new_account_uses_placeholder(api, monkeypatch):
+    resp = _oauth_login(api, monkeypatch, {
+        "sub": "gh-new", "email": "someone@example.com",
+        "email_verified": False, "name": "New"})
+    assert "token=" in resp.headers["location"]
+    store = store_module.get_store()
+    assert store.get_user_by_email("someone@example.com") is None
+    assert store.get_user_by_oauth("github_id", "gh-new")["email"].endswith(
+        "@users.noreply.scholaragent")

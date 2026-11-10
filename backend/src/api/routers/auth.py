@@ -139,16 +139,24 @@ def oauth_callback(provider: str, code: str = "", state: str = "",
         store.update_user(uid, **{id_field: profile["sub"]})
         return RedirectResponse(f"{config.FRONTEND_URL}/#/auth/callback?linked={provider}")
 
-    # 登入模式：先比對供應商 id，其次同 email 帳號自動綁定，否則新建
+    # 登入模式：先比對供應商 id；其次「已驗證」的同 email 帳號自動綁定；否則新建。
+    # 未驗證的 email 不可用來認領既有帳號（否則可在供應商端冒用他人 email 接管）。
     user = store.get_user_by_oauth(id_field, profile["sub"])
-    if not user and profile.get("email"):
-        user = store.get_user_by_email(profile["email"])
-        if user:
+    email = profile.get("email")
+    verified = bool(email) and bool(profile.get("email_verified"))
+    if not user and email:
+        existing = store.get_user_by_email(email)
+        if existing and not verified:
+            return RedirectResponse(
+                f"{config.FRONTEND_URL}/#/auth/callback?error=email_unverified")
+        if existing:
+            user = existing
             store.update_user(user["id"], **{id_field: profile["sub"]})
     if not user:
-        email = profile.get("email") or f"{provider}-{profile['sub']}@users.noreply.scholaragent"
+        new_email = email if verified else (
+            f"{provider}-{profile['sub']}@users.noreply.scholaragent")
         try:
-            user = store.create_user(email=email, display_name=profile.get("name"),
+            user = store.create_user(email=new_email, display_name=profile.get("name"),
                                      **{id_field: profile["sub"]})
         except ValueError:
             raise HTTPException(status_code=409, detail="帳號建立衝突，請改用 email 登入")
