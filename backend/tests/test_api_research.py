@@ -10,7 +10,11 @@ from src.store.sqlite_faiss import SqliteFaissStore
 
 
 class StubResearchService:
-    def stream_deepresearch(self, topic, max_subs=4, k=4):
+    def __init__(self):
+        self.scopes = []
+
+    def stream_deepresearch(self, topic, max_subs=4, k=4, paper_ids=None):
+        self.scopes.append(paper_ids)
         yield {"type": "decompose", "questions": ["子題一", "子題二"]}
         yield {"type": "section", "question": "子題一", "content": "摘要一", "papers": ["p1"]}
         yield {"type": "section", "question": "子題二", "content": "摘要二", "papers": []}
@@ -18,13 +22,16 @@ class StubResearchService:
         yield {"type": "citations", "citations": [{"id": "p1", "title": "T1"}]}
         yield {"type": "done"}
 
-    def litreview(self, topic, k=8):
+    def litreview(self, topic, k=8, paper_ids=None):
+        self.scopes.append(paper_ids)
         return {"content": f"# 綜述：{topic}", "papers": ["p1"]}
 
     def compare(self, topic=None, paper_ids=None, k=6):
+        self.scopes.append(paper_ids)
         return {"content": "| 論文 | 方法 |", "papers": paper_ids or ["p1"]}
 
-    def report(self, topic, k=8):
+    def report(self, topic, k=8, paper_ids=None):
+        self.scopes.append(paper_ids)
         return {"content": f"## 主題概述 {topic}", "papers": ["p1"]}
 
     def bibtex(self, topic=None, paper_ids=None, k=8):
@@ -35,7 +42,8 @@ class StubResearchService:
             return None
         return {"content": "白話解讀", "papers": ["p1"]}
 
-    def write(self, tool, text="", topic=""):
+    def write(self, tool, text="", topic="", paper_ids=None):
+        self.scopes.append(paper_ids)
         return f"{tool}:{(text or topic)[:10]}"
 
 
@@ -105,3 +113,53 @@ def test_write_tools(api, auth):
 def test_research_requires_auth(api):
     assert api.post("/api/litreview", json={"topic": "x"}).status_code == 401
     assert api.post("/api/deepresearch", json={"topic": "x"}).status_code == 401
+
+
+# ---- 以專案文獻作為來源 ----
+def _project_with_papers(api, auth):
+    store = store_module.get_store()
+    store.upsert_papers([{"id": i, "title": i, "abstract": "a", "link": f"https://e.com/{i}"}
+                         for i in ("p1", "p2")])
+    project = api.post("/api/projects", headers=auth, json={"name": "P"}).json()
+    api.post(f"/api/projects/{project['id']}/papers", headers=auth,
+             json={"paper_ids": ["p1", "p2"]})
+    return project["id"]
+
+
+def test_research_tools_use_project_papers_as_source(api, auth):
+    pid = _project_with_papers(api, auth)
+    service = research_module.get_research_service()
+    for path, body in [("/api/litreview", {"topic": "t"}), ("/api/report", {"topic": "t"}),
+                       ("/api/deepresearch", {"topic": "t"}), ("/api/compare", {}),
+                       ("/api/write/latex", {"topic": "t"})]:
+        resp = api.post(path, headers=auth, json={**body, "project_id": pid})
+        assert resp.status_code == 200, path
+        assert set(service.scopes[-1]) == {"p1", "p2"}, path
+
+
+def test_explicit_paper_ids_win_over_project(api, auth):
+    pid = _project_with_papers(api, auth)
+    api.post("/api/litreview", headers=auth,
+             json={"topic": "t", "project_id": pid, "paper_ids": ["p2"]})
+    assert research_module.get_research_service().scopes[-1] == ["p2"]
+
+
+def test_without_scope_tools_search_the_whole_library(api, auth):
+    api.post("/api/litreview", headers=auth, json={"topic": "t"})
+    assert research_module.get_research_service().scopes[-1] is None
+
+
+def test_research_tools_reject_foreign_project(api, auth):
+    other = api.post("/auth/register",
+                     json={"email": "o@b.c", "password": "password123"}).json()["token"]
+    project = api.post("/api/projects", json={"name": "theirs"},
+                       headers={"Authorization": f"Bearer {other}"}).json()
+    for path in ("/api/litreview", "/api/report", "/api/deepresearch", "/api/write/latex"):
+        resp = api.post(path, headers=auth, json={"topic": "t", "project_id": project["id"]})
+        assert resp.status_code == 404, path
+
+
+def test_compare_on_empty_project_is_rejected(api, auth):
+    project = api.post("/api/projects", headers=auth, json={"name": "empty"}).json()
+    assert api.post("/api/compare", headers=auth,
+                    json={"project_id": project["id"]}).status_code == 422
