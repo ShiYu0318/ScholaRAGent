@@ -1,116 +1,92 @@
-// ⌘K 指令面板：頁面導覽 + 之後可掛上動作（抓論文、切語言…）。
-import { ActionList, Box, Text, TextInput } from "@primer/react";
-import { SearchIcon } from "@primer/octicons-react";
+// ⌘K 指令面板：跳頁、開專案，或把輸入的字直接拿去提問 / 搜尋文獻。
+// 高頻操作：不做進場動畫以外的任何動效。
+import { CornerDownLeft, FolderOpen, MessageSquareText, Compass, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { NAV_ITEMS } from "./Shell";
+import { useProjects } from "../lib/types";
+import { ALL_NAV } from "./Shell";
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
+interface Command {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  to: string;
 }
 
-export function CommandPalette({ open, onClose }: Props) {
+export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const projects = useProjects();
   const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [active, setActive] = useState(0);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    if (open) {
+    const el = dialogRef.current;
+    if (!el) return;
+    if (open && !el.open) {
       setQuery("");
-      requestAnimationFrame(() => inputRef.current?.focus());
+      setActive(0);
+      el.showModal();
     }
+    if (!open && el.open) el.close();
   }, [open]);
 
-  const items = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return NAV_ITEMS.filter((item) => {
-      const label = t(item.key).toLowerCase();
-      return !q || label.includes(q) || item.path.includes(q);
-    });
-  }, [query, t]);
+  const commands = useMemo<Command[]>(() => {
+    const q = query.trim();
+    const needle = q.toLowerCase();
+    const pages = ALL_NAV.map((n) => ({ id: n.path, label: t(n.key), icon: n.icon, to: n.path }));
+    const projs = (projects.data?.items ?? []).map((p) => ({
+      id: `p${p.id}`, label: p.name, icon: FolderOpen, to: `/projects/${p.id}`,
+    }));
+    const matches = [...pages, ...projs].filter((c) => !needle || c.label.toLowerCase().includes(needle));
+    if (q.length < 2) return matches;
+    return [
+      ...matches,
+      { id: "ask", label: t("palette.ask", { q }), icon: MessageSquareText, to: `/ask?q=${encodeURIComponent(q)}` },
+      { id: "find", label: t("palette.discover", { q }), icon: Compass, to: `/discover?q=${encodeURIComponent(q)}` },
+    ];
+  }, [query, projects.data, t]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "Enter" && items.length > 0) {
-        navigate(items[0].path);
-        onClose();
-      }
-    };
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, items, navigate, onClose]);
-
-  if (!open) return null;
+  const run = (cmd: Command | undefined) => {
+    if (!cmd) return;
+    navigate(cmd.to);
+    onClose();
+  };
 
   return (
-    <Box
-      onClick={onClose}
-      sx={{
-        position: "fixed",
-        inset: 0,
-        bg: "primer.canvas.backdrop",
-        zIndex: 100,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-start",
-        pt: "12vh",
-      }}
-    >
-      <Box
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
-        sx={{
-          width: 560,
-          maxWidth: "90vw",
-          bg: "canvas.overlay",
-          border: "1px solid",
-          borderColor: "border.default",
-          borderRadius: 2,
-          boxShadow: "shadow.large",
-          overflow: "hidden",
-        }}
-      >
-        <Box p={2} borderBottom="1px solid" borderColor="border.default">
-          <TextInput
-            ref={inputRef}
-            block
-            leadingVisual={SearchIcon}
-            placeholder={t("common.typeToFilter")}
+    <dialog ref={dialogRef} className="palette" aria-label={t("common.commandPalette")} onClose={onClose}
+            onMouseDown={(e) => { if (e.target === dialogRef.current) onClose(); }}>
+      {open && (
+        <>
+          <input
+            autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("palette.placeholder")}
+            aria-label={t("palette.placeholder")}
+            onChange={(e) => { setQuery(e.target.value); setActive(0); }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, commands.length - 1)); }
+              if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+              if (e.key === "Enter") { e.preventDefault(); run(commands[active]); }
+            }}
           />
-        </Box>
-        <ActionList>
-          {items.map((item) => (
-            <ActionList.Item
-              key={item.path}
-              onSelect={() => {
-                navigate(item.path);
-                onClose();
-              }}
-            >
-              <ActionList.LeadingVisual>
-                <item.icon />
-              </ActionList.LeadingVisual>
-              {t(item.key)}
-              <ActionList.TrailingVisual>
-                <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.subtle" }}>
-                  {item.path}
-                </Text>
-              </ActionList.TrailingVisual>
-            </ActionList.Item>
-          ))}
-          {items.length === 0 && (
-            <Box p={3}>
-              <Text sx={{ color: "fg.muted", fontSize: 1 }}>{t("common.empty")}</Text>
-            </Box>
-          )}
-        </ActionList>
-      </Box>
-    </Box>
+          <div className="palette-list" role="listbox">
+            {commands.length === 0 && <div className="empty" style={{ padding: 20 }}>{t("palette.empty")}</div>}
+            {commands.map((cmd, i) => (
+              <button key={cmd.id} type="button" role="option" aria-selected={i === active}
+                      className="menu-item palette-item"
+                      onMouseEnter={() => setActive(i)} onClick={() => run(cmd)}>
+                <cmd.icon size={15} />
+                <span className="grow truncate">{cmd.label}</span>
+                {i === active && <CornerDownLeft size={13} style={{ color: "var(--ink-faint)" }} />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </dialog>
   );
 }
