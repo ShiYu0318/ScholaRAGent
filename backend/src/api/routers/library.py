@@ -2,13 +2,13 @@
 import io
 import zipfile
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.ratelimit import heavy_limit, limit_user, llm_limit
 from src.api.validators import PaperId, Tag
 from src.api.deps import get_current_user, get_store
 from src.api.services.library import get_library_service
@@ -33,6 +33,46 @@ def get_paper(paper_id: str, _user=Depends(get_current_user)):
     if paper is None:
         raise HTTPException(status_code=404, detail="論文不存在")
     return paper
+
+
+# ---- 主動搜尋與匯入 ----
+discover_limit = limit_user("discover", 20, 60)
+
+
+class ImportBody(BaseModel):
+    refs: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(
+        min_length=1, max_length=25,
+        description="arXiv ID、arXiv 連結或 DOI")
+    project_id: int | None = None
+    add_to_reading: bool = False
+
+
+@router.get("/discover", dependencies=[Depends(discover_limit)])
+def discover(query: str = Query(min_length=2, max_length=200),
+             limit: int = Query(default=10, ge=1, le=25),
+             _user=Depends(get_current_user)):
+    """依主題搜尋外部文獻（arXiv）；結果不會自動入庫。"""
+    return get_library_service().discover(query.strip(), limit=limit)
+
+
+@router.post("/papers/import", dependencies=[Depends(discover_limit)])
+def import_papers(body: ImportBody, user=Depends(get_current_user),
+                  store: Store = Depends(get_store)):
+    """把指定論文匯入文庫，並可同時加入專案與閱讀清單。"""
+    if body.project_id is not None and store.get_project(body.project_id, user["id"]) is None:
+        raise HTTPException(status_code=404, detail="專案不存在")
+    result = get_library_service().import_refs(body.refs)
+    ids = [p["id"] for p in result["imported"]]
+    if body.project_id is not None and ids:
+        store.project_add_papers(body.project_id, user["id"], ids)
+    if body.add_to_reading:
+        existing = {r["id"] for r in store.reading_items(user["id"])}
+        for p in result["imported"]:
+            if p["id"] not in existing:
+                store.reading_upsert(user["id"], p["id"], p["title"])
+    for pid in ids:
+        store.log_interaction("import", paper_id=pid, user_id=user["id"])
+    return result
 
 
 class DailyBody(BaseModel):
