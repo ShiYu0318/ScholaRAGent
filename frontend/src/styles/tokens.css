@@ -1,0 +1,111 @@
+/* 設計 tokens：紙張、墨、紅筆批註。
+   名稱取自研究者的桌面，而不是通用的 gray-700 / surface-2。
+   淺色＝稿紙；深色＝夜間閱讀燈下的同一張桌子（同色相，只改明度）。 */
+:root {
+  /* 紙：由下而上三層，差距刻意很小 */
+  --paper-sunk: #efeadf;      /* 輸入框、凹陷區 */
+  --paper: #f7f3ea;           /* 頁面 */
+  --paper-raised: #fdfbf5;    /* 卡片、面板 */
+  --paper-float: #ffffff;     /* 浮層 */
+
+  /* 墨：四個層級 */
+  --ink: #1f1b16;
+  --ink-2: #4a433a;
+  --ink-3: #7a7163;
+  --ink-faint: #a69d8d;
+
+  /* 格線 */
+  --rule: rgba(60, 45, 20, 0.12);
+  --rule-soft: rgba(60, 45, 20, 0.07);
+  --rule-strong: rgba(60, 45, 20, 0.24);
+
+  /* 紅筆：唯一的強調色，只用在「行動」與「目前位置」 */
+  --pencil: #a83a24;
+  --pencil-hover: #8f2f1c;
+  --pencil-wash: rgba(168, 58, 36, 0.09);
+  --on-pencil: #fffaf3;
+
+  /* 螢光筆：引用與選取 */
+  --marker: #f6e58d;
+  --marker-wash: rgba(214, 180, 40, 0.2);
+
+  /* 語意色（低彩度，像印章與便條） */
+  --ok: #3c6e47;
+  --ok-wash: rgba(60, 110, 71, 0.11);
+  --warn: #8a6410;
+  --warn-wash: rgba(170, 125, 20, 0.14);
+  --danger: #a12d2d;
+  --danger-wash: rgba(161, 45, 45, 0.1);
+
+  --focus: #a83a24;
+  --float-shadow: 0 0 0 1px rgba(60, 45, 20, 0.1), 0 4px 12px -2px rgba(60, 45, 20, 0.14),
+    0 16px 32px -8px rgba(60, 45, 20, 0.12);
+
+  /* 字 */
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC",
+    "Microsoft JhengHei", "Segoe UI", sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Songti TC",
+    "Noto Serif TC", "Source Han Serif TC", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* 字級：14px 為底、比例 1.2 */
+  --t-caption: 11px;
+  --t-small: 12px;
+  --t-body: 14px;
+  --t-lead: 16px;
+  --t-h3: 19px;
+  --t-h2: 23px;
+  --t-h1: 28px;
+
+  /* 間距：4px 為單位 */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --sidebar-w: 248px;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper-sunk: #131210;
+  --paper: #1a1815;
+  --paper-raised: #211f1b;
+  --paper-float: #2a2722;
+
+  --ink: #ece6da;
+  --ink-2: #c2b9a9;
+  --ink-3: #91887a;
+  --ink-faint: #665f54;
+
+  --rule: rgba(255, 240, 215, 0.1);
+  --rule-soft: rgba(255, 240, 215, 0.06);
+  --rule-strong: rgba(255, 240, 215, 0.2);
+
+  --pencil: #e2755c;
+  --pencil-hover: #ec8a73;
+  --pencil-wash: rgba(226, 117, 92, 0.13);
+  --on-pencil: #1a1815;
+
+  --marker: #6d5f1c;
+  --marker-wash: rgba(214, 180, 40, 0.16);
+
+  --ok: #7fb58b;
+  --ok-wash: rgba(127, 181, 139, 0.13);
+  --warn: #d4a94a;
+  --warn-wash: rgba(212, 169, 74, 0.13);
+  --danger: #e07a7a;
+  --danger-wash: rgba(224, 122, 122, 0.13);
+
+  --focus: #e2755c;
+  --float-shadow: 0 0 0 1px rgba(255, 240, 215, 0.12), 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
