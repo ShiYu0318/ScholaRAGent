@@ -23,6 +23,14 @@ def _register(api, email="u@example.com", password="password123"):
     return api.post("/auth/register", json={"email": email, "password": password})
 
 
+def _start_state(api, provider="github"):
+    """走 /auth/oauth/{provider} 取得 state（TestClient 會保留 nonce cookie）。"""
+    from urllib.parse import parse_qs, urlparse
+    resp = api.get(f"/auth/oauth/{provider}", follow_redirects=False)
+    assert resp.status_code == 307
+    return parse_qs(urlparse(resp.headers["location"]).query)["state"][0]
+
+
 def test_register_returns_token_and_user(api):
     resp = _register(api)
     assert resp.status_code == 201
@@ -128,8 +136,7 @@ def test_oauth_callback_login_creates_user(api, monkeypatch):
     monkeypatch.setattr(auth_lib, "exchange_code",
                         lambda provider, code: {"sub": "gh-1", "email": "gh@example.com",
                                                 "email_verified": True, "name": "GH"})
-    state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=5,
-                                  provider="github", mode="login")
+    state = _start_state(api)
     resp = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
                    follow_redirects=False)
     assert resp.status_code == 307
@@ -139,7 +146,8 @@ def test_oauth_callback_login_creates_user(api, monkeypatch):
     user = store.get_user_by_oauth("github_id", "gh-1")
     assert user["email"] == "gh@example.com"
 
-    # 再次登入：不重複建帳號
+    # 再次登入：不重複建帳號（nonce 一次性，需重新發起）
+    state = _start_state(api)
     resp2 = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
                     follow_redirects=False)
     assert resp2.status_code == 307
@@ -154,8 +162,7 @@ def _oauth_login(api, monkeypatch, profile):
     monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
     monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
     monkeypatch.setattr(auth_lib, "exchange_code", lambda provider, code: profile)
-    state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=5,
-                                  provider="github", mode="login")
+    state = _start_state(api)
     return api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
                    follow_redirects=False)
 
@@ -191,3 +198,30 @@ def test_oauth_unverified_email_new_account_uses_placeholder(api, monkeypatch):
     assert store.get_user_by_email("someone@example.com") is None
     assert store.get_user_by_oauth("github_id", "gh-new")["email"].endswith(
         "@users.noreply.scholaragent")
+
+
+def test_oauth_state_from_another_browser_is_rejected(api, monkeypatch):
+    """login CSRF：攻擊者把自己的 callback 連結丟給受害者，受害者瀏覽器沒有對應 nonce。"""
+    from src import config
+    from src.api import auth as auth_lib
+
+    monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
+    monkeypatch.setattr(auth_lib, "exchange_code",
+                        lambda provider, code: {"sub": "gh-atk", "email": "a@example.com",
+                                                "email_verified": True, "name": "A"})
+    state = _start_state(api)
+    api.cookies.clear()  # 換一個瀏覽器
+    resp = api.get(f"/auth/oauth/github/callback?code=ok&state={state}",
+                   follow_redirects=False)
+    assert resp.status_code == 400
+    assert store_module.get_store().stats()["users"] == 0
+
+
+def test_oauth_start_sets_httponly_nonce_cookie(api, monkeypatch):
+    from src import config
+    monkeypatch.setattr(config, "GITHUB_CLIENT_ID", "cid")
+    monkeypatch.setattr(config, "GITHUB_CLIENT_SECRET", "sec")
+    resp = api.get("/auth/oauth/github", follow_redirects=False)
+    cookie = resp.headers["set-cookie"].lower()
+    assert "oauth_nonce=" in cookie and "httponly" in cookie and "samesite=lax" in cookie

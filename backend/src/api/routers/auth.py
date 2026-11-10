@@ -1,5 +1,9 @@
 """認證端點：Email+密碼註冊/登入、OAuth（Google/GitHub）、Discord 帳號綁定。"""
-from fastapi import APIRouter, Depends, HTTPException
+import hashlib
+import hmac
+import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr, Field
 
@@ -92,22 +96,48 @@ def _require_provider(provider):
         raise HTTPException(status_code=404, detail=f"{provider} 登入未啟用（缺金鑰）")
 
 
+_NONCE_COOKIE = "oauth_nonce"
+
+
+def _nonce_hash(nonce):
+    return hashlib.sha256(nonce.encode("utf-8")).hexdigest()
+
+
+def _begin_oauth(response, user_id, provider, mode):
+    """簽發 state 並把 nonce 存進 HttpOnly cookie，讓 callback 能確認是同一個瀏覽器。
+
+    state 只帶 nonce 的雜湊：即使授權網址外洩，也無法反推 cookie 值。
+    """
+    nonce = secrets.token_urlsafe(24)
+    state = auth_lib.create_token(user_id, purpose="oauth_state", expires_minutes=10,
+                                  provider=provider, mode=mode, nh=_nonce_hash(nonce))
+    response.set_cookie(
+        _NONCE_COOKIE, nonce, max_age=600, httponly=True, samesite="lax",
+        secure=config.API_PUBLIC_URL.startswith("https://"), path="/auth",
+    )
+    return auth_lib.authorize_url(provider, state)
+
+
+def _nonce_matches(request, payload):
+    nonce = request.cookies.get(_NONCE_COOKIE, "")
+    expected = payload.get("nh") or ""
+    return bool(nonce and expected) and hmac.compare_digest(_nonce_hash(nonce), expected)
+
+
 @router.get("/oauth/{provider}", dependencies=[Depends(oauth_limit)])
 def oauth_start(provider: str):
     """導向供應商授權頁（登入模式）。"""
     _require_provider(provider)
-    state = auth_lib.create_token(0, purpose="oauth_state", expires_minutes=10,
-                                  provider=provider, mode="login")
-    return RedirectResponse(auth_lib.authorize_url(provider, state))
+    response = RedirectResponse("/")
+    response.headers["location"] = _begin_oauth(response, 0, provider, "login")
+    return response
 
 
 @router.post("/discord/link")
-def discord_link(user=Depends(get_current_user)):
+def discord_link(response: Response, user=Depends(get_current_user)):
     """回傳 Discord 綁定授權網址（前端自行導向）。"""
     _require_provider("discord")
-    state = auth_lib.create_token(user["id"], purpose="oauth_state", expires_minutes=10,
-                                  provider="discord", mode="link")
-    return {"url": auth_lib.authorize_url("discord", state)}
+    return {"url": _begin_oauth(response, user["id"], "discord", "link")}
 
 
 @router.delete("/discord/link")
@@ -117,12 +147,19 @@ def discord_unlink(user=Depends(get_current_user), store: Store = Depends(get_st
 
 
 @router.get("/oauth/{provider}/callback", dependencies=[Depends(oauth_limit)])
-def oauth_callback(provider: str, code: str = "", state: str = "",
+def oauth_callback(provider: str, request: Request, code: str = "", state: str = "",
                    store: Store = Depends(get_store)):
     _require_provider(provider)
     payload = auth_lib.decode_token(state, purpose="oauth_state")
-    if not payload or payload.get("provider") != provider or not code:
+    if (not payload or payload.get("provider") != provider or not code
+            or not _nonce_matches(request, payload)):
         raise HTTPException(status_code=400, detail="OAuth state 無效或已過期")
+    response = _oauth_finish(provider, code, payload, store)
+    response.delete_cookie(_NONCE_COOKIE, path="/auth")
+    return response
+
+
+def _oauth_finish(provider, code, payload, store):
 
     try:
         profile = auth_lib.exchange_code(provider, code)
