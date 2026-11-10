@@ -1,30 +1,17 @@
-// 圖譜頁：引用網路（seed 展開）、概念圖（社群/摘要）、全域搜尋。
-// 圖 + 圖例 + 表格視圖（無障礙替代），hover tooltip 由 ForceGraph 提供。
-import {
-  Box,
-  Button,
-  Flash,
-  Heading,
-  Label,
-  SegmentedControl,
-  Spinner,
-  Text,
-  TextInput,
-} from "@primer/react";
-import { SearchIcon, SyncIcon } from "@primer/octicons-react";
+// 圖譜：從結構看一個領域。引用網路找關鍵論文、概念圖看方法與資料集的關係、
+// 全域問答回答「這個領域整體在做什麼」這類跨文獻的問題。
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { Network, RefreshCw, Search, Table2 } from "lucide-react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import { communityColor, ForceGraph, type GraphEdge, type GraphNode } from "../components/ForceGraph";
+import { Markdown } from "../components/Markdown";
+import { SaveDocumentButton } from "../components/SaveDocument";
 import { api } from "../lib/api";
-import {
-  communityColor,
-  ForceGraph,
-  type GraphEdge,
-  type GraphNode,
-} from "../components/ForceGraph";
+import { Button, Empty, Input, Notice, PageHead, Spinner, Tabs } from "../ui";
 
-type Mode = "citation" | "concept" | "global";
+type Mode = "concept" | "citation" | "global";
 
 interface GraphData {
   nodes: GraphNode[];
@@ -36,6 +23,10 @@ interface GraphData {
 interface GlobalAnswer {
   answer: string;
   communities: { nodes: string[]; summary: string }[];
+}
+
+function Dot({ index }: { index: number }) {
+  return <span style={{ width: 9, height: 9, borderRadius: "50%", background: communityColor(index), flex: "none", display: "inline-block" }} />;
 }
 
 export function Graph() {
@@ -50,9 +41,8 @@ export function Graph() {
     queryKey: ["graph", "concept"],
     queryFn: () => api<GraphData>("/api/graph/concept?summarize=true"),
     enabled: mode === "concept",
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60_000,
   });
-
   const citation = useQuery({
     queryKey: ["graph", "citation", seed],
     queryFn: () => {
@@ -61,240 +51,163 @@ export function Graph() {
       return api<GraphData>(`/api/graph/citation?${params}`);
     },
     enabled: mode === "citation" && seed !== null,
+    retry: false,
   });
-
   const globalSearch = useMutation({
-    mutationFn: (q: string) =>
-      api<GlobalAnswer>(`/api/graph/global?query=${encodeURIComponent(q)}`),
+    mutationFn: (q: string) => api<GlobalAnswer>(`/api/graph/global?query=${encodeURIComponent(q)}`),
   });
 
   const active = mode === "concept" ? concept : citation;
   const data = mode === "global" ? null : active.data;
 
-  // 引用圖點節點 = 以該論文為新種子展開（標題檢索 fallback）
-  const onNodeClick = useCallback(
-    (node: GraphNode) => {
-      if (mode !== "citation") return;
-      setSeedInput(node.label);
-      setSeed({ seed: node.id, title: node.label });
-    },
-    [mode],
-  );
+  // 引用圖：點節點就以該論文為新種子展開
+  const onNodeClick = useCallback((node: GraphNode) => {
+    if (mode !== "citation") return;
+    setSeedInput(node.label);
+    setSeed({ seed: node.id, title: node.label });
+  }, [mode]);
 
-  const communityIds = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.nodes.map((n) => n.community))].sort((a, b) => a - b);
-  }, [data]);
+  const communityIds = useMemo(
+    () => (data ? [...new Set(data.nodes.map((n) => n.community))].sort((a, b) => a - b) : []),
+    [data]);
+
+  const submitSeed = (e: FormEvent) => { e.preventDefault(); if (seedInput.trim()) setSeed({ seed: seedInput.trim() }); };
+  const submitGlobal = (e: FormEvent) => { e.preventDefault(); if (query.trim()) globalSearch.mutate(query.trim()); };
 
   return (
-    <Box>
-      <Box display="flex" sx={{ gap: 3, alignItems: "center", mb: 3, flexWrap: "wrap" }}>
-        <Heading as="h2" sx={{ fontSize: 3, flex: 1 }}>
-          {t("nav.graph")}
-        </Heading>
-        <SegmentedControl aria-label="graph mode" onChange={(i) => setMode(["citation", "concept", "global"][i] as Mode)}>
-          <SegmentedControl.Button selected={mode === "citation"}>
-            {t("graph.citation")}
-          </SegmentedControl.Button>
-          <SegmentedControl.Button selected={mode === "concept"}>
-            {t("graph.concept")}
-          </SegmentedControl.Button>
-          <SegmentedControl.Button selected={mode === "global"}>
-            {t("graph.global")}
-          </SegmentedControl.Button>
-        </SegmentedControl>
-      </Box>
+    <div className="stack-lg">
+      <PageHead title={t("nav.graph")}>{t(`graph.intro.${mode}`)}</PageHead>
+      <Tabs<Mode> label={t("nav.graph")} value={mode} onChange={setMode}
+                  items={[
+                    { key: "concept", label: t("graph.concept") },
+                    { key: "citation", label: t("graph.citation") },
+                    { key: "global", label: t("graph.global") },
+                  ]} />
 
       {mode === "citation" && (
-        <Box display="flex" sx={{ gap: 2, mb: 3 }}>
-          <TextInput
-            block
-            leadingVisual={SearchIcon}
-            placeholder={t("graph.seedPlaceholder")}
-            value={seedInput}
-            onChange={(e) => setSeedInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && seedInput.trim()) {
-                setSeed({ seed: seedInput.trim() });
-              }
-            }}
-          />
-          <Button
-            variant="primary"
-            disabled={!seedInput.trim()}
-            onClick={() => setSeed({ seed: seedInput.trim() })}
-          >
-            {t("graph.load")}
-          </Button>
-        </Box>
+        <form className="row" onSubmit={submitSeed}>
+          <div className="grow">
+            <Input icon={Search} value={seedInput} onChange={(e) => setSeedInput(e.target.value)}
+                   placeholder={t("graph.seedPlaceholder")} aria-label={t("graph.seedPlaceholder")} maxLength={300} />
+          </div>
+          <Button type="submit" variant="primary" disabled={!seedInput.trim()} loading={citation.isFetching}>{t("graph.load")}</Button>
+        </form>
       )}
 
       {mode === "global" && (
-        <Box display="flex" sx={{ gap: 2, mb: 3 }}>
-          <TextInput
-            block
-            leadingVisual={SearchIcon}
-            placeholder={t("graph.globalPlaceholder")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && query.trim()) globalSearch.mutate(query.trim());
-            }}
-          />
-          <Button
-            variant="primary"
-            disabled={!query.trim() || globalSearch.isPending}
-            onClick={() => globalSearch.mutate(query.trim())}
-          >
-            {t("graph.ask")}
-          </Button>
-        </Box>
+        <>
+          <form className="row" onSubmit={submitGlobal}>
+            <div className="grow">
+              <Input icon={Search} value={query} onChange={(e) => setQuery(e.target.value)}
+                     placeholder={t("graph.globalPlaceholder")} aria-label={t("graph.globalPlaceholder")} maxLength={500} />
+            </div>
+            <Button type="submit" variant="primary" disabled={!query.trim()} loading={globalSearch.isPending}>{t("graph.ask")}</Button>
+          </form>
+          {globalSearch.isError && <Notice tone="danger">{t("graph.loadFailed")}</Notice>}
+          {!globalSearch.data && !globalSearch.isPending && (
+            <div className="panel"><Empty icon={Network} title={t("graph.globalEmpty")}>{t("graph.globalEmptyBody")}</Empty></div>
+          )}
+          {globalSearch.data && (
+            <div className="grid-main">
+              <section className="panel">
+                <div className="panel-head">
+                  <span className="panel-title">{query}</span>
+                  <SaveDocumentButton size="sm" title={query} content={globalSearch.data.answer} kind="report" />
+                </div>
+                <div className="panel-pad"><Markdown>{globalSearch.data.answer}</Markdown></div>
+              </section>
+              <aside className="stack">
+                <span className="t-label">{t("graph.communities")}</span>
+                {globalSearch.data.communities.map((c, i) => (
+                  <div key={i} className="row" style={{ alignItems: "flex-start" }}>
+                    <span style={{ paddingTop: 6 }}><Dot index={i} /></span>
+                    <span className="t-meta">{c.summary || c.nodes.slice(0, 5).join("、")}</span>
+                  </div>
+                ))}
+              </aside>
+            </div>
+          )}
+        </>
       )}
 
       {mode !== "global" && (
         <>
-          <Box display="flex" sx={{ gap: 2, mb: 2, alignItems: "center", flexWrap: "wrap" }}>
-            {communityIds.length > 1 &&
-              communityIds.map((c) => (
-                <Box key={c} display="flex" sx={{ gap: 1, alignItems: "center" }}>
-                  <Box
-                    sx={{
-                      width: 10, height: 10, borderRadius: "50%",
-                      bg: communityColor(c),
-                    }}
-                  />
-                  <Text sx={{ fontSize: 0, color: "fg.muted" }}>C{c + 1}</Text>
-                </Box>
-              ))}
-            <Box flex={1} />
+          <div className="row-wrap">
+            {communityIds.length > 1 && communityIds.map((c) => (
+              <span key={c} className="row t-meta" style={{ gap: 5 }}><Dot index={c} />C{c + 1}</span>
+            ))}
+            <span className="grow" />
             {mode === "concept" && (
-              <Button
-                size="small"
-                leadingVisual={SyncIcon}
-                onClick={() => void concept.refetch()}
-              >
-                {t("graph.rebuild")}
+              <Button size="sm" icon={RefreshCw} loading={concept.isFetching} onClick={() => void concept.refetch()}>{t("graph.rebuild")}</Button>
+            )}
+            {data && data.nodes.length > 0 && (
+              <Button size="sm" icon={showTable ? Network : Table2} onClick={() => setShowTable(!showTable)}>
+                {showTable ? t("graph.showGraph") : t("graph.showTable")}
               </Button>
             )}
-            <Button size="small" onClick={() => setShowTable(!showTable)}>
-              {showTable ? t("graph.showGraph") : t("graph.showTable")}
-            </Button>
-          </Box>
+          </div>
 
-          <Box
-            sx={{
-              border: "1px solid", borderColor: "border.default", borderRadius: 2,
-              bg: "canvas.default", overflow: "hidden", minHeight: 300,
-            }}
-          >
-            {active.isPending && mode === "concept" && (
-              <Box display="flex" justifyContent="center" p={6}>
-                <Spinner />
-              </Box>
-            )}
-            {mode === "citation" && seed === null && (
-              <Box p={5} textAlign="center">
-                <Text sx={{ color: "fg.muted" }}>{t("graph.seedHint")}</Text>
-              </Box>
-            )}
-            {active.isError && (
-              <Box p={4}>
-                <Flash variant="danger">{t("graph.loadFailed")}</Flash>
-              </Box>
-            )}
-            {data && data.nodes.length === 0 && (
-              <Box p={5} textAlign="center">
-                <Text sx={{ color: "fg.muted" }}>{t("graph.emptyConcept")}</Text>
-              </Box>
-            )}
+          <div className="panel" style={{ overflow: "hidden", minHeight: 320 }}>
+            {active.isPending && active.fetchStatus !== "idle" && <div className="empty" style={{ padding: 80 }}><Spinner /></div>}
+            {mode === "citation" && seed === null && <Empty icon={Network} title={t("graph.seedTitle")}>{t("graph.seedHint")}</Empty>}
+            {active.isError && <div style={{ padding: 16 }}><Notice tone="danger">{t("graph.loadFailed")}</Notice></div>}
+            {data && data.nodes.length === 0 && <Empty icon={Network} title={t("graph.emptyConcept")} />}
             {data && data.nodes.length > 0 && !showTable && (
               <ForceGraph nodes={data.nodes} edges={data.edges} onNodeClick={onNodeClick} />
             )}
             {data && data.nodes.length > 0 && showTable && (
-              <Box as="table" sx={{ width: "100%", fontSize: 1, borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    {[t("graph.colLabel"), "kind", "community", "pagerank"].map((h) => (
-                      <Box
-                        as="th" key={h}
-                        sx={{ textAlign: "left", p: 2, borderBottom: "1px solid", borderColor: "border.default", color: "fg.muted" }}
-                      >
-                        {h}
-                      </Box>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...data.nodes]
-                    .sort((a, b) => b.pagerank - a.pagerank)
-                    .map((n) => (
+              <div className="prose" style={{ maxWidth: "none", padding: 16 }}>
+                <table style={{ display: "table", width: "100%" }}>
+                  <thead>
+                    <tr><th>{t("graph.colLabel")}</th><th>{t("graph.colKind")}</th><th>{t("graph.colCommunity")}</th><th>PageRank</th></tr>
+                  </thead>
+                  <tbody>
+                    {[...data.nodes].sort((a, b) => b.pagerank - a.pagerank).map((n) => (
                       <tr key={n.id}>
-                        <Box as="td" sx={{ p: 2, borderBottom: "1px solid", borderColor: "border.muted" }}>{n.label}</Box>
-                        <Box as="td" sx={{ p: 2, borderBottom: "1px solid", borderColor: "border.muted" }}>{n.kind}</Box>
-                        <Box as="td" sx={{ p: 2, borderBottom: "1px solid", borderColor: "border.muted" }}>C{n.community + 1}</Box>
-                        <Box as="td" sx={{ p: 2, borderBottom: "1px solid", borderColor: "border.muted", fontFamily: "mono" }}>{n.pagerank}</Box>
+                        <td>{n.label}</td><td>{n.kind}</td>
+                        <td><span className="row" style={{ gap: 5 }}><Dot index={n.community} />C{n.community + 1}</span></td>
+                        <td className="num mono">{n.pagerank}</td>
                       </tr>
                     ))}
-                </tbody>
-              </Box>
+                  </tbody>
+                </table>
+              </div>
             )}
-          </Box>
+          </div>
 
-          <Box display="grid" sx={{ gridTemplateColumns: "1fr 1fr", gap: 3, mt: 3 }}>
-            {mode === "citation" && data?.influential && data.influential.length > 0 && (
-              <Box sx={{ border: "1px solid", borderColor: "border.default", borderRadius: 2, p: 3 }}>
-                <Heading as="h3" sx={{ fontSize: 1, mb: 2 }}>
-                  {t("graph.influential")}
-                </Heading>
+          {mode === "citation" && data?.influential && data.influential.length > 0 && (
+            <section className="panel">
+              <div className="panel-head"><span className="panel-title">{t("graph.influential")}</span></div>
+              <div className="list">
                 {data.influential.map((n, i) => (
-                  <Box key={n.id} display="flex" sx={{ gap: 2, mb: 1, alignItems: "baseline" }}>
-                    <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.subtle" }}>{i + 1}.</Text>
-                    <Text sx={{ fontSize: 1, flex: 1 }}>{n.label}</Text>
-                    <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.muted" }}>{n.pagerank}</Text>
-                  </Box>
+                  <div key={n.id} className="list-row list-row-click" style={{ alignItems: "baseline" }}
+                       onClick={() => { setSeedInput(n.label); setSeed({ seed: n.id, title: n.label }); }}>
+                    <span className="mono t-meta num" style={{ width: 20 }}>{i + 1}</span>
+                    <span className="grow">{n.label}</span>
+                    <span className="mono t-meta num">{n.pagerank}</span>
+                  </div>
                 ))}
-              </Box>
-            )}
-            {mode === "concept" && data?.communities && data.communities.length > 0 && (
-              <Box sx={{ border: "1px solid", borderColor: "border.default", borderRadius: 2, p: 3, gridColumn: "1 / -1" }}>
-                <Heading as="h3" sx={{ fontSize: 1, mb: 2 }}>
-                  {t("graph.communities")}
-                </Heading>
+              </div>
+            </section>
+          )}
+          {mode === "concept" && data?.communities && data.communities.length > 0 && (
+            <section className="panel">
+              <div className="panel-head"><span className="panel-title">{t("graph.communities")}</span></div>
+              <div className="list">
                 {data.communities.map((c, i) => (
-                  <Box key={i} display="flex" sx={{ gap: 2, mb: 2, alignItems: "flex-start" }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", bg: communityColor(i), mt: 1, flexShrink: 0 }} />
-                    <Box>
-                      <Text sx={{ fontSize: 1 }}>{c.summary || t("common.empty")}</Text>
-                      <Box display="flex" flexWrap="wrap" sx={{ gap: 1, mt: 1 }}>
-                        {c.nodes.slice(0, 8).map((n) => (
-                          <Label key={n}>{n}</Label>
-                        ))}
-                      </Box>
-                    </Box>
-                  </Box>
+                  <div key={i} className="list-row">
+                    <span style={{ paddingTop: 6 }}><Dot index={i} /></span>
+                    <div className="grow">
+                      <div>{c.summary || t("graph.noSummary")}</div>
+                      <div className="t-meta" style={{ marginTop: 2 }}>{c.nodes.slice(0, 8).join(" · ")}</div>
+                    </div>
+                  </div>
                 ))}
-              </Box>
-            )}
-          </Box>
+              </div>
+            </section>
+          )}
         </>
       )}
-
-      {mode === "global" && (
-        <Box sx={{ border: "1px solid", borderColor: "border.default", borderRadius: 2, p: 4, minHeight: 200 }}>
-          {globalSearch.isPending && (
-            <Box display="flex" justifyContent="center" p={4}>
-              <Spinner />
-            </Box>
-          )}
-          {globalSearch.isError && <Flash variant="danger">{t("graph.loadFailed")}</Flash>}
-          {globalSearch.data && (
-            <Text sx={{ whiteSpace: "pre-wrap", fontSize: 1 }}>{globalSearch.data.answer}</Text>
-          )}
-          {!globalSearch.data && !globalSearch.isPending && (
-            <Text sx={{ color: "fg.muted" }}>{t("graph.globalHint")}</Text>
-          )}
-        </Box>
-      )}
-    </Box>
+    </div>
   );
 }

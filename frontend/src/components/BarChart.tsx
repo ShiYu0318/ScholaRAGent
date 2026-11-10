@@ -1,19 +1,10 @@
-// 輕量長條圖：純 SVG，night 主題配色，hover 顯示數值（<title>）。
-// 給 Trends 時序與 Analytics 活動圖共用，避免為簡單圖表引入繪圖庫。
-import { Box } from "@primer/react";
-
+// 極簡長條圖（SVG）：單一序列，顏色取自主題的墨色，數值直接標在長條上。
 export interface BarDatum {
   label: string;
   value: number;
 }
 
-interface BarChartProps {
-  data: BarDatum[];
-  height?: number;
-  color?: string;
-}
-
-export function BarChart({ data, height = 160, color = "#2f81f7" }: BarChartProps) {
+export function BarChart({ data, height = 160, accent }: { data: BarDatum[]; height?: number; accent?: boolean }) {
   if (data.length === 0) return null;
   const step = 34;
   const width = Math.max(data.length * step, 120);
@@ -22,46 +13,25 @@ export function BarChart({ data, height = 160, color = "#2f81f7" }: BarChartProp
   const labelEvery = Math.max(1, Math.ceil(data.length / 8));
 
   return (
-    <Box sx={{ overflowX: "auto" }}>
-      <svg
-        width="100%"
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="xMinYMid meet"
-        role="img"
-      >
+    <div style={{ overflowX: "auto" }}>
+      <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}
+           preserveAspectRatio="xMinYMid meet" role="img"
+           aria-label={data.map((d) => `${d.label}: ${d.value}`).join(", ")}>
         {data.map((d, i) => {
           const h = Math.max((d.value / max) * (chartH - 14), d.value > 0 ? 3 : 1);
           const x = i * step + 5;
           return (
             <g key={d.label}>
-              <rect
-                x={x}
-                y={chartH - h}
-                width={step - 12}
-                height={h}
-                rx={2}
-                fill={d.value > 0 ? color : "#30363d"}
-              >
+              <rect x={x} y={chartH - h} width={step - 12} height={h} rx={2}
+                    fill={d.value > 0 ? (accent ? "var(--pencil)" : "var(--ink-2)") : "var(--rule-strong)"}>
                 <title>{`${d.label}: ${d.value}`}</title>
               </rect>
-              <text
-                x={x + (step - 12) / 2}
-                y={chartH - h - 4}
-                textAnchor="middle"
-                fontSize={10}
-                fill="#8b949e"
-              >
+              <text x={x + (step - 12) / 2} y={chartH - h - 4} textAnchor="middle" fontSize={10}
+                    fill="var(--ink-3)" style={{ fontVariantNumeric: "tabular-nums" }}>
                 {d.value > 0 ? d.value : ""}
               </text>
               {i % labelEvery === 0 && (
-                <text
-                  x={x + (step - 12) / 2}
-                  y={height - 6}
-                  textAnchor="middle"
-                  fontSize={10}
-                  fill="#8b949e"
-                >
+                <text x={x + (step - 12) / 2} y={height - 6} textAnchor="middle" fontSize={10} fill="var(--ink-3)">
                   {d.label}
                 </text>
               )}
@@ -69,6 +39,6 @@ export function BarChart({ data, height = 160, color = "#2f81f7" }: BarChartProp
           );
         })}
       </svg>
-    </Box>
+    </div>
   );
 }

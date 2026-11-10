@@ -1,10 +1,16 @@
 // OAuth 轉址落點：#/auth/callback?token=… | ?linked=discord | ?error=…
-import { Box, Flash, Spinner } from "@primer/react";
+// token 一讀到就存起來並以 replace 導走，不留在瀏覽紀錄裡。
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../lib/auth";
+import { Notice, Spinner } from "../ui";
+
+const ERRORS: Record<string, string> = {
+  already_linked: "auth.alreadyLinked",
+  email_unverified: "auth.emailUnverified",
+};
 
 export function AuthCallback() {
   const { t } = useTranslation();
@@ -19,30 +25,23 @@ export function AuthCallback() {
     handled.current = true;
     const params = new URLSearchParams(location.search);
     const token = params.get("token");
-    const linked = params.get("linked");
-    const err = params.get("error");
-
     if (token) {
       void acceptToken(token).then(() => navigate("/", { replace: true }));
-    } else if (linked) {
+    } else if (params.get("linked")) {
       navigate("/settings", { replace: true });
     } else {
-      setError(err === "already_linked" ? t("auth.alreadyLinked") : t("auth.oauthFailed"));
+      setError(t(ERRORS[params.get("error") ?? ""] ?? "auth.oauthFailed"));
     }
   }, [location.search, acceptToken, navigate, t]);
 
   return (
-    <Box minHeight="100vh" bg="canvas.default" display="flex" alignItems="center" justifyContent="center">
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       {error ? (
-        <Box>
-          <Flash variant="danger">{error}</Flash>
-          <Box mt={3} textAlign="center">
-            <Link to="/login">{t("auth.signIn")}</Link>
-          </Box>
-        </Box>
-      ) : (
-        <Spinner />
-      )}
-    </Box>
+        <div className="stack" style={{ maxWidth: 380, textAlign: "center" }}>
+          <Notice tone="danger">{error}</Notice>
+          <Link to="/login">{t("auth.backToSignIn")}</Link>
+        </div>
+      ) : <Spinner />}
+    </div>
   );
 }

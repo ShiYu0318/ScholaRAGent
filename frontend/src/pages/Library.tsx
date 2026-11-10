@@ -1,419 +1,178 @@
-// 文庫頁：論文清單（搜尋/來源/個人化/抓取/匯出）、閱讀看板（拖拉）、RSS feeds。
-import {
-  ActionMenu,
-  ActionList,
-  Box,
-  Button,
-  Flash,
-  Heading,
-  IconButton,
-  Label,
-  SegmentedControl,
-  Spinner,
-  Text,
-  TextInput,
-  ToggleSwitch,
-} from "@primer/react";
-import {
-  CodeIcon,
-  DownloadIcon,
-  HeartIcon,
-  PlusIcon,
-  SearchIcon,
-  SyncIcon,
-  TrashIcon,
-} from "@primer/octicons-react";
+// 文庫：已收錄的論文與自己的閱讀進度。
+// 清單負責「找到那篇」，看板負責「讀到哪了」；點任何一篇都開同一個詳情面板。
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookmarkPlus, BookOpen, Compass, Download, Plus, Search, StickyNote, Trash2 } from "lucide-react";
 import { useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useSearchParams } from "react-router-dom";
 
-import { api } from "../lib/api";
-import { CardState } from "../components/Card";
+import { AddToProject, PaperDrawer, PaperRow, paperPath } from "../components/Paper";
+import { api, download } from "../lib/api";
+import { READING_STATES, useReading, type Paper, type ReadingState } from "../lib/types";
+import { Button, Empty, IconButton, Input, Menu, PageHead, QueryState, Tabs } from "../ui";
+import { useToast } from "../ui/toast";
 
-interface Paper {
-  id: string;
-  title: string;
-  link: string;
-  published: string;
-  source: string;
-  reproducibility?: { has_code: boolean };
-}
-
-interface ReadingItem {
-  id: string;
-  title: string;
-  state: "to-read" | "reading" | "done";
-}
-
-interface Feed {
-  id: number;
-  url: string;
-  title: string | null;
-  enabled: boolean;
-}
-
-type View = "papers" | "kanban" | "feeds";
-const STATES: ReadingItem["state"][] = ["to-read", "reading", "done"];
-
-async function download(path: string, filename: string) {
-  const resp = await fetch(path, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("scholaragent.token") ?? ""}` },
-  });
-  const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+type View = "papers" | "board";
 
 export function Library() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<View>("papers");
+  const [params, setParams] = useSearchParams();
+  const view = (params.get("view") as View) || "papers";
   const [query, setQuery] = useState("");
-  const [personalized, setPersonalized] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
+  const [openPaper, setOpenPaper] = useState<string | null>(null);
+  const [over, setOver] = useState<ReadingState | null>(null);
 
-  const invalidate = (key: string) => void queryClient.invalidateQueries({ queryKey: [key] });
-
-  // ---- 論文 ----
   const papers = useQuery({
     queryKey: ["papers", query],
-    queryFn: () =>
-      api<{ items: Paper[]; total: number }>(
-        `/api/papers?limit=100${query ? `&query=${encodeURIComponent(query)}` : ""}`,
-      ),
-    enabled: view === "papers" && !personalized,
+    queryFn: () => api<{ items: Paper[]; total: number }>(
+      `/api/papers?limit=100${query ? `&query=${encodeURIComponent(query)}` : ""}`),
+    enabled: view === "papers",
+    placeholderData: (prev) => prev,
   });
-  const recommended = useQuery({
-    queryKey: ["personalized"],
-    queryFn: () => api<{ items: Paper[] }>("/api/daily/personalized?top_n=10"),
-    enabled: view === "papers" && personalized,
-  });
+  const reading = useReading();
+  const readingById = new Map((reading.data?.items ?? []).map((r) => [r.id, r]));
 
-  const fetchDaily = useMutation({
-    mutationFn: () => api<{ fetched: number; added: number }>("/api/daily", { method: "POST", body: {} }),
-    onSuccess: (d) => {
-      setFlash(t("library.fetched", { fetched: d.fetched, added: d.added }));
-      invalidate("papers");
-    },
+  const refreshReading = () => void queryClient.invalidateQueries({ queryKey: ["reading"] });
+  const addToReading = useMutation({
+    mutationFn: (p: Paper) => api("/api/reading", { method: "POST", body: { paper_id: p.id, title: p.title } }),
+    onSuccess: () => { toast.show(t("library.addedToReading")); refreshReading(); },
+    onError: toast.error,
   });
-
-  const like = useMutation({
-    mutationFn: (paperId: string) =>
-      api("/api/interactions", { method: "POST", body: { action: "like", paper_id: paperId } }),
+  const move = useMutation({
+    mutationFn: ({ id, state }: { id: string; state: ReadingState }) =>
+      api(`/api/reading/${paperPath(id)}`, { method: "PATCH", body: { state } }),
+    onSuccess: refreshReading, onError: toast.error,
   });
-
-  const addToKanban = useMutation({
-    mutationFn: (p: Paper) =>
-      api("/api/reading", { method: "POST", body: { paper_id: p.id, title: p.title } }),
-    onSuccess: () => {
-      setFlash(t("library.addedToKanban"));
-      invalidate("reading");
-    },
-  });
-
-  // ---- 看板 ----
-  const reading = useQuery({
-    queryKey: ["reading"],
-    queryFn: () => api<{ items: ReadingItem[] }>("/api/reading"),
-    enabled: view === "kanban",
-  });
-
-  const moveCard = useMutation({
-    mutationFn: ({ id, state }: { id: string; state: string }) =>
-      api(`/api/reading/${id}`, { method: "PATCH", body: { state } }),
-    onSuccess: () => invalidate("reading"),
-  });
-
   const removeCard = useMutation({
-    mutationFn: (id: string) => api(`/api/reading/${id}`, { method: "DELETE" }),
-    onSuccess: () => invalidate("reading"),
+    mutationFn: (id: string) => api(`/api/reading/${paperPath(id)}`, { method: "DELETE" }),
+    onSuccess: refreshReading, onError: toast.error,
   });
+  const exportFile = (path: string, name: string) => void download(path, name).catch(toast.error);
 
-  // ---- Feeds ----
-  const feeds = useQuery({
-    queryKey: ["feeds"],
-    queryFn: () => api<{ items: Feed[] }>("/api/feeds"),
-    enabled: view === "feeds",
-  });
-  const [feedUrl, setFeedUrl] = useState("");
-
-  const addFeed = useMutation({
-    mutationFn: (url: string) => api("/api/feeds", { method: "POST", body: { url } }),
-    onSuccess: () => {
-      setFeedUrl("");
-      invalidate("feeds");
-    },
-    onError: (e) => setFlash(e.message),
-  });
-  const toggleFeed = useMutation({
-    mutationFn: (f: Feed) =>
-      api(`/api/feeds/${f.id}`, { method: "PATCH", body: { enabled: !f.enabled } }),
-    onSuccess: () => invalidate("feeds"),
-  });
-  const deleteFeed = useMutation({
-    mutationFn: (id: number) => api(`/api/feeds/${id}`, { method: "DELETE" }),
-    onSuccess: () => invalidate("feeds"),
-  });
-  const refreshFeeds = useMutation({
-    mutationFn: () => api<{ feeds: number; fetched: number; added: number }>("/api/feeds/refresh", { method: "POST" }),
-    onSuccess: (d) => {
-      setFlash(t("library.feedsRefreshed", { fetched: d.fetched, added: d.added }));
-      invalidate("papers");
-    },
-  });
-
-  const onDrop = (state: ReadingItem["state"]) => (e: DragEvent) => {
+  const onDrop = (state: ReadingState) => (e: DragEvent) => {
     e.preventDefault();
+    setOver(null);
     const id = e.dataTransfer.getData("text/paper-id");
-    if (id) moveCard.mutate({ id, state });
+    if (id) move.mutate({ id, state });
   };
 
-  const paperList = personalized ? recommended.data?.items : papers.data?.items;
-  const activePapersQuery = personalized ? recommended : papers;
-
   return (
-    <Box>
-      <Box display="flex" sx={{ gap: 3, alignItems: "center", mb: 3, flexWrap: "wrap" }}>
-        <Heading as="h2" sx={{ fontSize: 3, flex: 1 }}>
-          {t("nav.library")}
-        </Heading>
-        <SegmentedControl aria-label="library view"
-                          onChange={(i) => setView(["papers", "kanban", "feeds"][i] as View)}>
-          <SegmentedControl.Button selected={view === "papers"}>{t("library.papers")}</SegmentedControl.Button>
-          <SegmentedControl.Button selected={view === "kanban"}>{t("library.kanban")}</SegmentedControl.Button>
-          <SegmentedControl.Button selected={view === "feeds"}>{t("library.feeds")}</SegmentedControl.Button>
-        </SegmentedControl>
-      </Box>
+    <div className="stack-lg">
+      <PageHead
+        title={t("nav.library")}
+        actions={
+          <>
+            <Menu
+              trigger={(props) => <Button icon={Download} {...props}>{t("library.export")}</Button>}
+              items={[
+                { label: "BibTeX (.bib)", onSelect: () => exportFile("/api/export/bibtex", "papers.bib") },
+                { label: "CSV", onSelect: () => exportFile("/api/export/csv", "papers.csv") },
+                { label: "Obsidian (.zip)", onSelect: () => exportFile("/api/export/obsidian", "obsidian-vault.zip") },
+              ]}
+            />
+            <Link className="btn btn-primary" to="/discover"><Compass size={14} />{t("library.findMore")}</Link>
+          </>
+        }
+      >
+        {t("library.intro")}
+      </PageHead>
 
-      {flash && (
-        <Flash sx={{ mb: 3 }} onClick={() => setFlash(null)}>
-          {flash}
-        </Flash>
-      )}
+      <Tabs<View> label={t("nav.library")} value={view}
+                  onChange={(next) => setParams(next === "papers" ? {} : { view: next }, { replace: true })}
+                  items={[
+                    { key: "papers", label: t("library.papers"), count: papers.data?.total },
+                    { key: "board", label: t("library.board"), count: reading.data?.items.length },
+                  ]} />
 
       {view === "papers" && (
-        <>
-          <Box display="flex" sx={{ gap: 2, mb: 3, flexWrap: "wrap", alignItems: "center" }}>
-            <Box flex={1} minWidth={240}>
-              <TextInput
-                block
-                leadingVisual={SearchIcon}
-                placeholder={t("library.searchPlaceholder")}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </Box>
-            <Button
-              variant={personalized ? "primary" : "default"}
-              onClick={() => setPersonalized(!personalized)}
-            >
-              {t("library.forYou")}
-            </Button>
-            <Button
-              leadingVisual={SyncIcon}
-              disabled={fetchDaily.isPending}
-              onClick={() => fetchDaily.mutate()}
-            >
-              {t("library.fetchToday")}
-            </Button>
-            <ActionMenu>
-              <ActionMenu.Button leadingVisual={DownloadIcon}>
-                {t("library.export")}
-              </ActionMenu.Button>
-              <ActionMenu.Overlay>
-                <ActionList>
-                  <ActionList.Item onSelect={() => void download("/api/export/csv", "papers.csv")}>
-                    CSV
-                  </ActionList.Item>
-                  <ActionList.Item onSelect={() => void download("/api/export/bibtex", "papers.bib")}>
-                    BibTeX
-                  </ActionList.Item>
-                  <ActionList.Item onSelect={() => void download("/api/export/obsidian", "obsidian-vault.zip")}>
-                    Obsidian
-                  </ActionList.Item>
-                </ActionList>
-              </ActionMenu.Overlay>
-            </ActionMenu>
-          </Box>
-
-          <Box sx={{ border: "1px solid", borderColor: "border.default", borderRadius: 2 }}>
-            <CardState
-              loading={activePapersQuery.isPending}
-              error={activePapersQuery.isError}
-              empty={paperList?.length === 0}
-            />
-            {(paperList ?? []).map((p) => (
-              <Box
-                key={p.id}
-                sx={{
-                  display: "flex", alignItems: "center", gap: 2, px: 3, py: 2,
-                  borderBottom: "1px solid", borderColor: "border.muted",
-                  ":last-child": { borderBottom: 0 },
-                }}
-              >
-                <Box flex={1} minWidth={0}>
-                  <a href={p.link} target="_blank" rel="noreferrer">
-                    <Text sx={{ fontSize: 1 }}>{p.title}</Text>
-                  </a>
-                  <Box display="flex" sx={{ gap: 2, mt: 1, alignItems: "center" }}>
-                    <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.subtle" }}>
-                      {p.id} · {p.published?.slice(0, 10)}
-                    </Text>
-                    <Label size="small">{p.source}</Label>
-                    {p.reproducibility?.has_code && (
-                      <Label size="small" variant="success">
-                        <CodeIcon size={12} /> code
-                      </Label>
-                    )}
-                  </Box>
-                </Box>
-                <IconButton
-                  aria-label={t("library.like")}
-                  icon={HeartIcon}
-                  size="small"
-                  variant="invisible"
-                  onClick={() => like.mutate(p.id)}
-                />
-                <IconButton
-                  aria-label={t("library.addToKanban")}
-                  icon={PlusIcon}
-                  size="small"
-                  variant="invisible"
-                  onClick={() => addToKanban.mutate(p)}
-                />
-              </Box>
-            ))}
-          </Box>
-        </>
+        <section className="stack">
+          <Input icon={Search} value={query} onChange={(e) => setQuery(e.target.value)}
+                 placeholder={t("library.searchPlaceholder")} aria-label={t("library.searchPlaceholder")} />
+          <div className="panel">
+            <QueryState loading={papers.isPending} error={papers.isError} empty={papers.data?.items.length === 0}
+                        emptyState={
+                          <Empty icon={BookOpen} title={query ? t("library.noMatch") : t("library.emptyTitle")}
+                                 action={!query && <Link className="btn btn-primary" to="/discover">{t("library.findMore")}</Link>}>
+                            {!query && t("library.emptyBody")}
+                          </Empty>
+                        } />
+            <div className="list">
+              {(papers.data?.items ?? []).map((p) => {
+                const r = readingById.get(p.id);
+                return (
+                  <PaperRow
+                    key={p.id}
+                    paper={{ ...p, reading: r ? { state: r.state, tags: r.tags, note: "" } : null }}
+                    onOpen={setOpenPaper}
+                    actions={
+                      <>
+                        {!r && <IconButton icon={BookmarkPlus} label={t("paper.addToReading")} onClick={() => addToReading.mutate(p)} />}
+                        <AddToProject paperIds={[p.id]}>
+                          {(props) => <IconButton icon={Plus} label={t("paper.addToProject")} {...props} />}
+                        </AddToProject>
+                      </>
+                    }
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </section>
       )}
 
-      {view === "kanban" && (
-        <Box display="grid" sx={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 3 }}>
-          {STATES.map((state) => (
-            <Box
-              key={state}
-              onDragOver={(e: DragEvent) => e.preventDefault()}
-              onDrop={onDrop(state)}
-              sx={{
-                border: "1px solid", borderColor: "border.default", borderRadius: 2,
-                bg: "canvas.subtle", minHeight: 320, display: "flex", flexDirection: "column",
-              }}
-            >
-              <Box sx={{ px: 3, py: 2, borderBottom: "1px solid", borderColor: "border.muted" }}>
-                <Text sx={{ fontSize: 1, fontWeight: "bold" }}>
-                  {t(`library.state.${state}`)}
-                </Text>
-                <Text sx={{ fontSize: 0, color: "fg.muted", ml: 2 }}>
-                  {reading.data?.items.filter((i) => i.state === state).length ?? 0}
-                </Text>
-              </Box>
-              <Box p={2} flex={1}>
-                {reading.isPending && (
-                  <Box display="flex" justifyContent="center" p={3}>
-                    <Spinner size="small" />
-                  </Box>
-                )}
-                {(reading.data?.items ?? [])
-                  .filter((i) => i.state === state)
-                  .map((item) => (
-                    <Box
-                      key={item.id}
-                      draggable
-                      onDragStart={(e: DragEvent) =>
-                        e.dataTransfer.setData("text/paper-id", item.id)
-                      }
-                      sx={{
-                        border: "1px solid", borderColor: "border.default", borderRadius: 2,
-                        bg: "canvas.default", p: 2, mb: 2, cursor: "grab",
-                        display: "flex", alignItems: "flex-start", gap: 2,
-                      }}
-                    >
-                      <Text sx={{ fontSize: 1, flex: 1 }}>{item.title}</Text>
-                      <IconButton
-                        aria-label={t("common.delete")}
-                        icon={TrashIcon}
-                        size="small"
-                        variant="invisible"
-                        onClick={() => removeCard.mutate(item.id)}
-                      />
-                    </Box>
+      {view === "board" && (
+        reading.data?.items.length === 0 ? (
+          <div className="panel">
+            <Empty icon={BookmarkPlus} title={t("library.boardEmpty")}
+                   action={<Button onClick={() => setParams({}, { replace: true })}>{t("library.papers")}</Button>}>
+              {t("library.boardEmptyBody")}
+            </Empty>
+          </div>
+        ) : (
+          <div className="board">
+            {READING_STATES.map((state) => {
+              const items = (reading.data?.items ?? []).filter((i) => i.state === state);
+              return (
+                <div key={state} className="board-col" data-over={over === state}
+                     onDragOver={(e) => { e.preventDefault(); setOver(state); }}
+                     onDragLeave={() => setOver(null)} onDrop={onDrop(state)}>
+                  <div className="board-col-head">
+                    <span className="t-strong">{t(`reading.${state}`)}</span>
+                    <span className="t-meta num">{items.length}</span>
+                  </div>
+                  {items.map((item) => (
+                    <div key={item.id} className="board-card" draggable
+                         onDragStart={(e) => e.dataTransfer.setData("text/paper-id", item.id)}>
+                      <button type="button" className="paper-title" style={{ fontSize: 14 }} onClick={() => setOpenPaper(item.id)}>
+                        {item.title}
+                      </button>
+                      <div className="spread" style={{ marginTop: 8 }}>
+                        <div className="paper-meta" style={{ marginTop: 0 }}>
+                          {item.note && <StickyNote size={12} aria-label={t("paper.note")} />}
+                          {item.tags.slice(0, 3).map((tag) => <span key={tag}>#{tag}</span>)}
+                        </div>
+                        <div className="row" style={{ gap: 2 }}>
+                          {/* 不靠拖曳也能移動：鍵盤與觸控使用者用這個選單 */}
+                          <select className="select" style={{ width: "auto", height: 24, fontSize: 11, padding: "0 4px" }}
+                                  value={item.state} aria-label={t("library.moveTo")}
+                                  onChange={(e) => move.mutate({ id: item.id, state: e.target.value as ReadingState })}>
+                            {READING_STATES.map((s) => <option key={s} value={s}>{t(`reading.${s}`)}</option>)}
+                          </select>
+                          <IconButton icon={Trash2} label={t("common.remove")} onClick={() => removeCard.mutate(item.id)} />
+                        </div>
+                      </div>
+                    </div>
                   ))}
-              </Box>
-            </Box>
-          ))}
-        </Box>
+                </div>
+              );
+            })}
+          </div>
+        )
       )}
 
-      {view === "feeds" && (
-        <Box>
-          <Box display="flex" sx={{ gap: 2, mb: 3 }}>
-            <TextInput
-              block
-              placeholder="https://example.com/feed.xml"
-              value={feedUrl}
-              onChange={(e) => setFeedUrl(e.target.value)}
-            />
-            <Button
-              variant="primary"
-              leadingVisual={PlusIcon}
-              disabled={!feedUrl.trim() || addFeed.isPending}
-              onClick={() => addFeed.mutate(feedUrl.trim())}
-            >
-              {t("library.addFeed")}
-            </Button>
-            <Button
-              leadingVisual={SyncIcon}
-              disabled={refreshFeeds.isPending}
-              onClick={() => refreshFeeds.mutate()}
-            >
-              {t("library.refreshFeeds")}
-            </Button>
-          </Box>
-          <Box sx={{ border: "1px solid", borderColor: "border.default", borderRadius: 2 }}>
-            <CardState
-              loading={feeds.isPending}
-              error={feeds.isError}
-              empty={feeds.data?.items.length === 0}
-            />
-            {(feeds.data?.items ?? []).map((f) => (
-              <Box
-                key={f.id}
-                sx={{
-                  display: "flex", alignItems: "center", gap: 3, px: 3, py: 2,
-                  borderBottom: "1px solid", borderColor: "border.muted",
-                  ":last-child": { borderBottom: 0 },
-                }}
-              >
-                <Box flex={1} minWidth={0}>
-                  <Text id={`feed-label-${f.id}`} sx={{ fontSize: 1 }}>
-                    {f.title || f.url}
-                  </Text>
-                  <Text as="div" sx={{ fontFamily: "mono", fontSize: 0, color: "fg.subtle" }}>
-                    {f.url}
-                  </Text>
-                </Box>
-                <ToggleSwitch
-                  aria-labelledby={`feed-label-${f.id}`}
-                  size="small"
-                  checked={f.enabled}
-                  onClick={() => toggleFeed.mutate(f)}
-                />
-                <IconButton
-                  aria-label={t("common.delete")}
-                  icon={TrashIcon}
-                  size="small"
-                  variant="invisible"
-                  onClick={() => deleteFeed.mutate(f.id)}
-                />
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-    </Box>
+      <PaperDrawer paperId={openPaper} onClose={() => setOpenPaper(null)} />
+    </div>
   );
 }

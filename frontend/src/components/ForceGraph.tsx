@@ -1,6 +1,5 @@
 // D3 力導向網路圖：拖拉節點、滾輪縮放、hover tooltip、點擊回呼。
-// 節點大小 = PageRank（sqrt 比例）；顏色 = 社群（固定順序類別色盤，
-// 已用 dataviz 驗證器對 #0d1117 表面通過六項檢查，worst adjacent CVD ΔE 13.7）。
+// 節點大小 = PageRank（sqrt 比例）；顏色 = 社群（固定順序的類別色盤）。
 // 超過六個社群折進灰色；只有 PageRank 前 8 名畫直接標籤（選擇性標籤原則）。
 import * as d3 from "d3";
 import { useEffect, useRef } from "react";
@@ -21,10 +20,11 @@ export interface GraphEdge {
   relation: string;
 }
 
+// 低彩度的六色：在稿紙色與深色底上都讀得清楚，第一色是紅筆（強調色）
 export const COMMUNITY_PALETTE = [
-  "#2f81f7", "#bb8009", "#a371f7", "#2ea043", "#d95926", "#db61a2",
+  "#b4472f", "#2f7391", "#7462ad", "#3f7a4d", "#b07a1c", "#a34d80",
 ];
-const OTHER_COLOR = "#6e7681";
+const OTHER_COLOR = "#8a8275";
 
 export function communityColor(index: number): string {
   return index < COMMUNITY_PALETTE.length ? COMMUNITY_PALETTE[index] : OTHER_COLOR;
@@ -74,12 +74,12 @@ export function ForceGraph({ nodes, edges, height = 560, onNodeClick }: Props) {
       .append("div")
       .style("position", "absolute")
       .style("pointer-events", "none")
-      .style("background", "#1c2128")
-      .style("border", "1px solid #30363d")
+      .style("background", "var(--paper-float)")
+      .style("box-shadow", "var(--float-shadow)")
       .style("border-radius", "6px")
       .style("padding", "6px 10px")
       .style("font-size", "12px")
-      .style("color", "#e6edf3")
+      .style("color", "var(--ink)")
       .style("max-width", "320px")
       .style("display", "none")
       .style("z-index", "10");
@@ -89,7 +89,7 @@ export function ForceGraph({ nodes, edges, height = 560, onNodeClick }: Props) {
       .selectAll("line")
       .data(simLinks)
       .join("line")
-      .attr("stroke", "#30363d")
+      .style("stroke", "var(--rule-strong)")
       .attr("stroke-width", 1.2)
       .attr("stroke-opacity", 0.9);
 
@@ -101,7 +101,7 @@ export function ForceGraph({ nodes, edges, height = 560, onNodeClick }: Props) {
       .attr("r", radius)
       .attr("fill", (n) => communityColor(n.community))
       // seed 節點以 2px 表面色外環強調（mark spec 的 surface ring）
-      .attr("stroke", (n) => (n.kind === "seed" ? "#e6edf3" : "#0d1117"))
+      .style("stroke", (n) => (n.kind === "seed" ? "var(--ink)" : "var(--paper-raised)"))
       .attr("stroke-width", 2)
       .style("cursor", "pointer");
 
@@ -112,7 +112,7 @@ export function ForceGraph({ nodes, edges, height = 560, onNodeClick }: Props) {
       .join("text")
       .text((n) => (n.label.length > 28 ? `${n.label.slice(0, 28)}…` : n.label))
       .attr("font-size", 11)
-      .attr("fill", "#7d8590")
+      .style("fill", "var(--ink-2)")
       .attr("pointer-events", "none");
 
     node

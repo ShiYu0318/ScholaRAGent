@@ -118,7 +118,8 @@ def remove_project_paper(project_id: int, paper_id: str,
 # ---- 總覽：研究流程進度與下一步 ----
 # 研究流程五個階段；每份文件依類型歸到「綜述」或「寫作」
 SYNTHESIS_KINDS = ("review", "report", "comparison", "deep_research")
-WRITING_KINDS = ("draft", "outline", "note")
+# 筆記（例如存下來的問答）是素材，不算開始寫作；有大綱或草稿才算
+WRITING_KINDS = ("draft", "outline")
 STAGES = ("collect", "read", "ask", "synthesize", "write")
 
 

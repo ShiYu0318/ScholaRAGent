@@ -290,3 +290,50 @@ def test_reading_partial_update(store):
     assert store.reading_update(u["id"], "nope", note="n") is False
     with pytest.raises(ValueError):
         store.reading_update(u["id"], "a1", state="bogus")
+
+
+def test_sqlite_store_survives_concurrent_readers_and_writers(tmp_path, fake_embedder):
+    """API 的同步端點跑在執行緒池：多個執行緒同時讀寫不得出錯，也不得讀到別的查詢的資料。"""
+    import threading
+
+    s = SqliteFaissStore(db_path=tmp_path / "c.db", embedder=fake_embedder)
+    users = [s.create_user(f"u{i}@x.io", display_name=f"user-{i}") for i in range(8)]
+    projects = {u["id"]: s.create_project(u["id"], f"project-of-{u['id']}") for u in users}
+    errors = []
+
+    def work(user):
+        try:
+            for n in range(25):
+                assert s.get_user(user["id"])["display_name"] == user["display_name"]
+                mine = s.list_projects(user["id"])
+                assert [p["name"] for p in mine] == [f"project-of-{user['id']}"]
+                s.create_document(user["id"], f"doc-{n}", project_id=projects[user["id"]]["id"])
+                assert all(d["user_id"] == user["id"] for d in s.list_documents(user["id"]))
+        except Exception as e:      # noqa: BLE001 - 收集任何執行緒內的失敗
+            errors.append(repr(e))
+
+    threads = [threading.Thread(target=work, args=(u,)) for u in users]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert all(len(s.list_documents(u["id"])) == 25 for u in users)
+    s.close()
+
+
+def test_failed_write_does_not_block_other_threads(tmp_path, fake_embedder):
+    """寫入失敗後交易必須回滾，否則其他執行緒的寫入會被卡住。"""
+    import threading
+
+    s = SqliteFaissStore(db_path=tmp_path / "l.db", embedder=fake_embedder)
+    u = s.create_user("u@x.io")
+    s.add_feed(u["id"], "https://example.com/rss")
+    with pytest.raises(ValueError):
+        s.add_feed(u["id"], "https://example.com/rss")       # 違反唯一限制
+    result = []
+    t = threading.Thread(target=lambda: result.append(s.create_project(u["id"], "after failure")))
+    t.start()
+    t.join(timeout=5)
+    assert not t.is_alive() and result and result[0]["name"] == "after failure"
+    s.close()

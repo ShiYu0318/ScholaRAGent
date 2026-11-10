@@ -1,13 +1,12 @@
-// 分析頁：近期活動長條圖、互動行為統計、閱讀看板管線、熱門主題、文庫總量。
-import { Box, Heading, Label, SegmentedControl, Text } from "@primer/react";
-import { BookIcon, DatabaseIcon, PulseIcon, TagIcon, ThumbsupIcon } from "@primer/octicons-react";
+// 分析：自己的研究節奏。焦點是「最近有沒有持續在讀」，其餘是輔助的分佈。
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../lib/api";
 import { BarChart } from "../components/BarChart";
-import { Card, CardState } from "../components/Card";
+import { api } from "../lib/api";
+import { READING_STATES } from "../lib/types";
+import { Empty, PageHead, QueryState, Segmented } from "../ui";
 
 interface AnalyticsResponse {
   actions: Record<string, number>;
@@ -16,8 +15,6 @@ interface AnalyticsResponse {
   topics: { keyword: string; count: number }[];
   library: Record<string, number | string | null>;
 }
-
-const READING_STATES = ["to-read", "reading", "done"] as const;
 
 function fillDays(activity: { date: string; count: number }[], days: number) {
   const byDate = new Map(activity.map((a) => [a.date, a.count]));
@@ -34,107 +31,74 @@ function fillDays(activity: { date: string; count: number }[], days: number) {
 
 export function Analytics() {
   const { t } = useTranslation();
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useState<"14" | "30">("14");
   const analytics = useQuery({
-    queryKey: ["analytics", "full", days],
+    queryKey: ["analytics", days],
     queryFn: () => api<AnalyticsResponse>(`/api/analytics?days=${days}`),
   });
   const data = analytics.data;
+  const series = data ? fillDays(data.activity, Number(days)) : [];
+  const total = series.reduce((sum, d) => sum + d.value, 0);
+  const activeDays = series.filter((d) => d.value > 0).length;
+  const readingTotal = data ? READING_STATES.reduce((sum, s) => sum + (data.reading[s] ?? 0), 0) : 0;
 
   return (
-    <Box>
-      <Box sx={{ display: "flex", alignItems: "center", mb: 3, gap: 3 }}>
-        <Heading as="h2" sx={{ fontSize: 3, flex: 1 }}>
-          {t("nav.analytics")}
-        </Heading>
-        <SegmentedControl aria-label={t("analytics.range")} size="small">
-          {[14, 30].map((d) => (
-            <SegmentedControl.Button key={d} selected={days === d} onClick={() => setDays(d)}>
-              {t("analytics.days", { count: d })}
-            </SegmentedControl.Button>
-          ))}
-        </SegmentedControl>
-      </Box>
+    <div className="stack-lg">
+      <PageHead title={t("nav.analytics")}
+                actions={<Segmented label={t("analytics.range")} value={days} onChange={setDays}
+                                    items={[{ key: "14", label: t("analytics.days", { count: 14 }) },
+                                            { key: "30", label: t("analytics.days", { count: 30 }) }]} />}>
+        {t("analytics.intro")}
+      </PageHead>
+      <QueryState loading={analytics.isPending} error={analytics.isError} />
+      {data && (
+        <>
+          <section className="panel panel-pad stack">
+            <div className="row" style={{ gap: 40, alignItems: "flex-end" }}>
+              <div>
+                <div className="t-label">{t("analytics.interactions")}</div>
+                <div className="stat-figure">{total}</div>
+              </div>
+              <div>
+                <div className="t-label">{t("analytics.activeDays")}</div>
+                <div className="stat-figure">{activeDays}<span className="t-meta" style={{ fontSize: 14, fontFamily: "var(--font-ui)", fontWeight: 400 }}> / {days}</span></div>
+              </div>
+            </div>
+            {total > 0 ? <BarChart data={series} height={180} /> : <Empty title={t("analytics.noActivity")}>{t("analytics.noActivityBody")}</Empty>}
+          </section>
 
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-          gap: 3,
-        }}
-      >
-        <Box sx={{ gridColumn: ["auto", "auto", "1 / -1"] }}>
-          <Card title={t("analytics.activity", { days })} icon={PulseIcon}>
-            <CardState loading={analytics.isPending} error={analytics.isError} />
-            {data && <BarChart data={fillDays(data.activity, days)} height={180} />}
-          </Card>
-        </Box>
-
-        <Card title={t("analytics.actions")} icon={ThumbsupIcon}>
-          <CardState
-            loading={analytics.isPending}
-            error={analytics.isError}
-            empty={data ? Object.keys(data.actions).length === 0 : false}
-          />
-          {data && (
-            <Box display="flex" flexWrap="wrap" sx={{ gap: 2 }}>
-              {Object.entries(data.actions).map(([action, n]) => (
-                <Label key={action} variant="accent">
-                  {action}: {n}
-                </Label>
+          <div className="grid-3">
+            <section className="stack">
+              <span className="t-label">{t("analytics.reading")}</span>
+              {READING_STATES.map((state) => {
+                const n = data.reading[state] ?? 0;
+                return (
+                  <div key={state} className="col" style={{ gap: 4 }}>
+                    <div className="spread"><span>{t(`reading.${state}`)}</span><span className="num t-strong">{n}</span></div>
+                    <div className="progress"><i style={{ width: `${readingTotal ? (n / readingTotal) * 100 : 0}%` }} /></div>
+                  </div>
+                );
+              })}
+            </section>
+            <section className="stack">
+              <span className="t-label">{t("analytics.actions")}</span>
+              {Object.keys(data.actions).length === 0 && <span className="t-meta">{t("analytics.none")}</span>}
+              {Object.entries(data.actions).sort((a, b) => b[1] - a[1]).map(([action, n]) => (
+                <div key={action} className="spread"><span>{t(`analytics.action.${action}`, { defaultValue: action })}</span><span className="num t-strong">{n}</span></div>
               ))}
-            </Box>
-          )}
-        </Card>
-
-        <Card title={t("analytics.readingPipeline")} icon={BookIcon}>
-          <CardState loading={analytics.isPending} error={analytics.isError} />
-          {data && (
-            <Box sx={{ display: "grid", gap: 2 }}>
-              {READING_STATES.map((state) => (
-                <Box key={state} sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <Text sx={{ fontSize: 1, flex: 1 }}>{t(`library.state.${state}`)}</Text>
-                  <Text sx={{ fontFamily: "mono", fontSize: 1 }}>
-                    {data.reading[state] ?? 0}
-                  </Text>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </Card>
-
-        <Card title={t("analytics.topics")} icon={TagIcon}>
-          <CardState
-            loading={analytics.isPending}
-            error={analytics.isError}
-            empty={data?.topics.length === 0}
-          />
-          {data && data.topics.length > 0 && (
-            <Box display="flex" flexWrap="wrap" sx={{ gap: 2 }}>
-              {data.topics.map((k) => (
-                <Label key={k.keyword} variant="secondary">
-                  {k.keyword} · {k.count}
-                </Label>
-              ))}
-            </Box>
-          )}
-        </Card>
-
-        <Card title={t("analytics.library")} icon={DatabaseIcon}>
-          <CardState loading={analytics.isPending} error={analytics.isError} />
-          {data && (
-            <Box display="flex" flexWrap="wrap" sx={{ gap: 2 }}>
-              {Object.entries(data.library)
-                .filter(([, v]) => typeof v === "number")
-                .map(([k, v]) => (
-                  <Text key={k} sx={{ fontFamily: "mono", fontSize: 0, color: "fg.muted" }}>
-                    {k}={String(v)}
-                  </Text>
+            </section>
+            <section className="stack">
+              <span className="t-label">{t("analytics.topics")}</span>
+              {data.topics.length === 0 && <span className="t-meta">{t("analytics.none")}</span>}
+              <div className="row-wrap">
+                {data.topics.map((k) => (
+                  <span key={k.keyword} className="keyword" style={{ cursor: "default" }}>{k.keyword}<span className="num">{k.count}</span></span>
                 ))}
-            </Box>
-          )}
-        </Card>
-      </Box>
-    </Box>
+              </div>
+            </section>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

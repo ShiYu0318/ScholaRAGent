@@ -1,21 +1,13 @@
-// 學習頁：依主題生成學習路徑（LLM/檢索式）、勾選步驟進度、技能等級管理。
-import {
-  Box,
-  Button,
-  Checkbox,
-  Heading,
-  IconButton,
-  ProgressBar,
-  Text,
-  TextInput,
-} from "@primer/react";
-import { MortarBoardIcon, PlusIcon, TrashIcon } from "@primer/octicons-react";
+// 學習：進入新領域時的讀書計畫。輸入主題產生一條學習路徑，逐項打勾；旁邊記錄自己的技能程度。
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { GraduationCap, Plus, Trash2 } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { api } from "../lib/api";
-import { Card, CardState } from "../components/Card";
+import { Button, Empty, IconButton, Input, PageHead, QueryState } from "../ui";
+import { useToast } from "../ui/toast";
 
 interface PathItem {
   title: string;
@@ -26,7 +18,6 @@ interface LearningPath {
   id: number;
   topic: string;
   items: PathItem[];
-  progress: Record<string, number>;
 }
 
 interface Skill {
@@ -36,215 +27,119 @@ interface Skill {
 
 export function Learning() {
   const { t } = useTranslation();
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [topic, setTopic] = useState("");
   const [skillName, setSkillName] = useState("");
-  const [skillLevel, setSkillLevel] = useState("50");
+  const [skillLevel, setSkillLevel] = useState(50);
 
-  const paths = useQuery({
-    queryKey: ["learning-paths"],
-    queryFn: () => api<{ items: LearningPath[] }>("/api/learning-paths"),
-  });
-  const skills = useQuery({
-    queryKey: ["skills"],
-    queryFn: () => api<{ items: Skill[] }>("/api/skills"),
-  });
+  const paths = useQuery({ queryKey: ["learning-paths"], queryFn: () => api<{ items: LearningPath[] }>("/api/learning-paths") });
+  const skills = useQuery({ queryKey: ["skills"], queryFn: () => api<{ items: Skill[] }>("/api/skills") });
+  const refreshPaths = () => void queryClient.invalidateQueries({ queryKey: ["learning-paths"] });
 
   const createPath = useMutation({
-    mutationFn: (newTopic: string) =>
-      api<LearningPath>("/api/learning-paths", {
-        method: "POST",
-        body: { topic: newTopic },
-      }),
-    onSuccess: () => {
-      setTopic("");
-      queryClient.invalidateQueries({ queryKey: ["learning-paths"] });
-    },
+    mutationFn: () => api<LearningPath>("/api/learning-paths", { method: "POST", body: { topic: topic.trim() } }),
+    onSuccess: () => { setTopic(""); refreshPaths(); },
+    onError: toast.error,
   });
-
   const updatePath = useMutation({
     mutationFn: ({ id, items }: { id: number; items: PathItem[] }) =>
       api<LearningPath>(`/api/learning-paths/${id}`, {
         method: "PATCH",
-        body: {
-          items,
-          progress: { done: items.filter((i) => i.done).length, total: items.length },
-        },
+        body: { items, progress: { done: items.filter((i) => i.done).length, total: items.length } },
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["learning-paths"] }),
+    onSuccess: refreshPaths, onError: toast.error,
   });
-
   const deletePath = useMutation({
-    mutationFn: (id: number) =>
-      api<void>(`/api/learning-paths/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["learning-paths"] }),
+    mutationFn: (id: number) => api<void>(`/api/learning-paths/${id}`, { method: "DELETE" }),
+    onSuccess: refreshPaths, onError: toast.error,
   });
-
   const putSkill = useMutation({
-    mutationFn: (body: Skill) =>
-      api<Skill>("/api/skills", { method: "PUT", body }),
-    onSuccess: () => {
-      setSkillName("");
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
-    },
+    mutationFn: (body: Skill) => api<Skill>("/api/skills", { method: "PUT", body }),
+    onSuccess: () => { setSkillName(""); void queryClient.invalidateQueries({ queryKey: ["skills"] }); },
+    onError: toast.error,
   });
 
-  const toggleItem = (path: LearningPath, index: number) => {
-    const items = path.items.map((it, i) =>
-      i === index ? { ...it, done: !it.done } : it,
-    );
-    updatePath.mutate({ id: path.id, items });
+  const submitPath = (e: FormEvent) => { e.preventDefault(); if (topic.trim()) createPath.mutate(); };
+  const submitSkill = (e: FormEvent) => {
+    e.preventDefault();
+    if (skillName.trim()) putSkill.mutate({ skill: skillName.trim(), level: skillLevel });
   };
 
   return (
-    <Box>
-      <Heading as="h2" sx={{ fontSize: 3, mb: 3 }}>
-        {t("nav.learning")}
-      </Heading>
-
-      <Box sx={{ display: "flex", gap: 2, mb: 3, maxWidth: 560 }}>
-        <TextInput
-          sx={{ flex: 1 }}
-          placeholder={t("learning.topicPlaceholder")}
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && topic.trim()) createPath.mutate(topic.trim());
-          }}
-        />
-        <Button
-          variant="primary"
-          leadingVisual={PlusIcon}
-          disabled={!topic.trim() || createPath.isPending}
-          onClick={() => createPath.mutate(topic.trim())}
-        >
-          {createPath.isPending ? t("common.loading") : t("learning.create")}
-        </Button>
-      </Box>
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: 3,
-        }}
-      >
-        {paths.isPending || paths.isError || paths.data?.items.length === 0 ? (
-          <Card title={t("learning.pathsTitle")} icon={MortarBoardIcon}>
-            <CardState
-              loading={paths.isPending}
-              error={paths.isError}
-              empty={paths.data?.items.length === 0}
-            />
-            {paths.data?.items.length === 0 && (
-              <Text sx={{ color: "fg.subtle", fontSize: 1 }}>{t("learning.emptyHint")}</Text>
-            )}
-          </Card>
-        ) : (
-          paths.data?.items.map((path) => {
+    <div className="stack-lg">
+      <PageHead title={t("nav.learning")}>{t("learning.intro")}</PageHead>
+      <div className="grid-main">
+        <section className="stack">
+          <form className="row" onSubmit={submitPath}>
+            <div className="grow">
+              <Input value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={200}
+                     placeholder={t("learning.topicPlaceholder")} aria-label={t("learning.topicPlaceholder")} />
+            </div>
+            <Button type="submit" variant="primary" icon={Plus} loading={createPath.isPending} disabled={!topic.trim()}>
+              {t("learning.generate")}
+            </Button>
+          </form>
+          <QueryState loading={paths.isPending} error={paths.isError} empty={paths.data?.items.length === 0}
+                      emptyState={<div className="panel"><Empty icon={GraduationCap} title={t("learning.emptyTitle")}>{t("learning.emptyBody")}</Empty></div>} />
+          {(paths.data?.items ?? []).map((path) => {
             const done = path.items.filter((i) => i.done).length;
             return (
-              <Card
-                key={path.id}
-                title={path.topic}
-                icon={MortarBoardIcon}
-                action={
-                  <IconButton
-                    aria-label={t("common.delete")}
-                    icon={TrashIcon}
-                    variant="invisible"
-                    size="small"
-                    onClick={() => deletePath.mutate(path.id)}
-                  />
-                }
-              >
-                <Box sx={{ display: "grid", gap: 2 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <ProgressBar
-                      progress={(done / Math.max(path.items.length, 1)) * 100}
-                      sx={{ flex: 1 }}
-                      aria-label={t("learning.progress", { done, total: path.items.length })}
-                    />
-                    <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.muted" }}>
-                      {done}/{path.items.length}
-                    </Text>
-                  </Box>
-                  {path.items.map((item, i) => (
-                    <Box
-                      key={`${path.id}-${i}`}
-                      as="label"
-                      sx={{ display: "flex", alignItems: "flex-start", gap: 2, cursor: "pointer" }}
-                    >
-                      <Checkbox
-                        checked={item.done}
-                        onChange={() => toggleItem(path, i)}
-                        aria-label={item.title}
-                      />
-                      <Text
-                        sx={{
-                          fontSize: 1,
-                          color: item.done ? "fg.subtle" : "fg.default",
-                          textDecoration: item.done ? "line-through" : "none",
-                        }}
-                      >
+              <article key={path.id} className="panel">
+                <div className="panel-head">
+                  <div className="grow">
+                    <h3 style={{ fontSize: 17 }}>{path.topic}</h3>
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <div className="progress grow"><i style={{ width: `${(done / Math.max(path.items.length, 1)) * 100}%` }} /></div>
+                      <span className="t-meta num">{done}/{path.items.length}</span>
+                    </div>
+                  </div>
+                  <Link className="btn btn-ghost btn-sm" to={`/discover?q=${encodeURIComponent(path.topic)}`}>{t("learning.findPapers")}</Link>
+                  <IconButton icon={Trash2} label={t("common.delete")} onClick={() => deletePath.mutate(path.id)} />
+                </div>
+                <div className="list">
+                  {path.items.map((item, index) => (
+                    <label key={index} className="list-row list-row-click" style={{ alignItems: "center" }}>
+                      <span className="check">
+                        <input type="checkbox" checked={item.done}
+                               onChange={() => updatePath.mutate({
+                                 id: path.id,
+                                 items: path.items.map((it, i) => (i === index ? { ...it, done: !it.done } : it)),
+                               })} />
+                      </span>
+                      <span className="grow" style={item.done ? { color: "var(--ink-faint)", textDecoration: "line-through" } : undefined}>
                         {item.title}
-                      </Text>
-                    </Box>
+                      </span>
+                    </label>
                   ))}
-                </Box>
-              </Card>
+                </div>
+              </article>
             );
-          })
-        )}
+          })}
+        </section>
 
-        <Card title={t("learning.skillsTitle")} icon={MortarBoardIcon}>
-          <CardState loading={skills.isPending} error={skills.isError} />
-          <Box sx={{ display: "grid", gap: 2 }}>
-            {skills.data?.items.map((s) => (
-              <Box key={s.skill} sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <Text sx={{ fontSize: 1, width: 140 }} className="truncate">
-                  {s.skill}
-                </Text>
-                <ProgressBar progress={s.level} sx={{ flex: 1 }} aria-label={s.skill} />
-                <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.muted", width: 32 }}>
-                  {s.level}
-                </Text>
-              </Box>
-            ))}
-            <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-              <TextInput
-                sx={{ flex: 1 }}
-                size="small"
-                placeholder={t("learning.skillPlaceholder")}
-                value={skillName}
-                onChange={(e) => setSkillName(e.target.value)}
-              />
-              <TextInput
-                sx={{ width: 72 }}
-                size="small"
-                type="number"
-                min={0}
-                max={100}
-                aria-label={t("learning.levelLabel")}
-                value={skillLevel}
-                onChange={(e) => setSkillLevel(e.target.value)}
-              />
-              <Button
-                size="small"
-                disabled={!skillName.trim() || putSkill.isPending}
-                onClick={() =>
-                  putSkill.mutate({
-                    skill: skillName.trim(),
-                    level: Math.max(0, Math.min(100, Number(skillLevel) || 0)),
-                  })
-                }
-              >
-                {t("common.save")}
-              </Button>
-            </Box>
-          </Box>
-        </Card>
-      </Box>
-    </Box>
+        <aside className="stack">
+          <span className="t-label">{t("learning.skills")}</span>
+          {(skills.data?.items ?? []).map((s) => (
+            <div key={s.skill} className="col" style={{ gap: 4 }}>
+              <div className="spread"><span>{s.skill}</span><span className="num t-meta">{Math.round(s.level)}</span></div>
+              <div className="progress"><i style={{ width: `${s.level}%` }} /></div>
+            </div>
+          ))}
+          {skills.data?.items.length === 0 && <span className="t-meta">{t("learning.noSkills")}</span>}
+          <form className="col" onSubmit={submitSkill} style={{ marginTop: 8 }}>
+            <Input value={skillName} onChange={(e) => setSkillName(e.target.value)} maxLength={80}
+                   placeholder={t("learning.skillPlaceholder")} aria-label={t("learning.skillPlaceholder")} />
+            <div className="row">
+              <input type="range" min={0} max={100} step={5} value={skillLevel} className="grow"
+                     style={{ accentColor: "var(--pencil)" }} aria-label={t("learning.level")}
+                     onChange={(e) => setSkillLevel(Number(e.target.value))} />
+              <span className="num t-meta" style={{ width: 28, textAlign: "right" }}>{skillLevel}</span>
+              <Button type="submit" size="sm" disabled={!skillName.trim()} loading={putSkill.isPending}>{t("learning.setSkill")}</Button>
+            </div>
+          </form>
+        </aside>
+      </div>
+    </div>
   );
 }
