@@ -7,7 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import {
   READING_STATES, shortDate, useProjects, useReading, type Paper, type ReadingState,
 } from "../lib/types";
@@ -106,10 +106,15 @@ export function PaperDrawer({ paperId, onClose }: { paperId: string | null; onCl
   const [tags, setTags] = useState("");
   const [explained, setExplained] = useState<string | null>(null);
 
+  // 只在「換了一篇論文」或「伺服器上的值真的變了」時才把欄位同步成伺服器的值。
+  // 依賴要用內容比較：閱讀清單每次重新載入都會給新的陣列，若拿陣列本身當依賴，
+  // 使用者打到一半的筆記會在背景重新載入時被清空。
+  const serverNote = entry?.note ?? "";
+  const serverTags = (entry?.tags ?? []).join(", ");
   useEffect(() => {
-    setNote(entry?.note ?? "");
-    setTags((entry?.tags ?? []).join(", "));
-  }, [entry?.note, entry?.tags, paperId]);
+    setNote(serverNote);
+    setTags(serverTags);
+  }, [paperId, serverNote, serverTags]);
   useEffect(() => setExplained(null), [paperId]);
 
   const refresh = () => {
@@ -117,14 +122,20 @@ export function PaperDrawer({ paperId, onClose }: { paperId: string | null; onCl
     void queryClient.invalidateQueries({ queryKey: ["project"] });
   };
 
-  // 還沒在閱讀清單裡就建立，否則只更新有變動的欄位
+  // 先嘗試局部更新，項目不存在（404）才建立。
+  // 不能用畫面上的 entry 來判斷：剛加入清單、快取還沒更新時它是舊的，
+  // 那時若走「建立」會把剛設好的狀態蓋回預設值。
   const saveReading = useMutation({
-    mutationFn: (patch: { state?: ReadingState; note?: string; tags?: string[] }) =>
-      entry
-        ? api(`/api/reading/${paperPath(paperId!)}`, { method: "PATCH", body: patch })
-        : api("/api/reading", { method: "POST", body: {
+    mutationFn: async (patch: { state?: ReadingState; note?: string; tags?: string[] }) => {
+      try {
+        return await api(`/api/reading/${paperPath(paperId!)}`, { method: "PATCH", body: patch });
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 404) throw err;
+        return api("/api/reading", { method: "POST", body: {
           paper_id: paperId, title: paper.data?.title ?? "", state: patch.state ?? "to-read",
-          note: patch.note ?? "", tags: patch.tags ?? [] } }),
+          note: patch.note ?? "", tags: patch.tags ?? [] } });
+      }
+    },
     onSuccess: refresh,
     onError: toast.error,
   });
@@ -213,13 +224,13 @@ export function PaperDrawer({ paperId, onClose }: { paperId: string | null; onCl
                 <Textarea id={id} rows={5} value={note} maxLength={5000}
                           placeholder={t("paper.notePlaceholder")}
                           onChange={(e) => setNote(e.target.value)}
-                          onBlur={() => note !== (entry?.note ?? "") && saveReading.mutate({ note })} />
+                          onBlur={() => note !== serverNote && saveReading.mutate({ note })} />
               )}
             </Field>
             <Field label={t("paper.tags")} hint={t("paper.tagsHint")}>
               {(id) => (
                 <Input id={id} value={tags} onChange={(e) => setTags(e.target.value)}
-                       onBlur={() => parsedTags.join(",") !== (entry?.tags ?? []).join(",") && saveReading.mutate({ tags: parsedTags })} />
+                       onBlur={() => parsedTags.join(", ") !== serverTags && saveReading.mutate({ tags: parsedTags })} />
               )}
             </Field>
             {!entry && (
