@@ -1142,21 +1142,52 @@ no network. That is what makes it usable as a pre-commit gate rather than a nigh
 
 ```bash
 cd backend
-uv run pytest                     # 390 passed, 20 skipped (postgres and e2e skip locally)
-E2E=1 uv run pytest tests/e2e     # Playwright UI smoke, needs both dev servers running
+uv run pytest                     # ~590 passed, ~30 skipped (postgres and e2e skip locally)
 ```
 
-Store behavior tests are parameterized over both backends and run against real
-Postgres+pgvector whenever `TEST_DATABASE_URL` is set. CI sets it via a service container, so
-the same assertions verify both persistence implementations:
+**The test process cannot reach real services.** `src/config.py` loads `backend/.env` on
+import, so `tests/conftest.py` first replaces every credential with a placeholder and points
+the LLM endpoint at a closed local port. A test that forgets a stub fails immediately with a
+connection error instead of quietly spending your API quota.
 
-```
-CI backend job:  403 passed, 7 skipped     # includes the pgvector-backed store tests
-Local:           390 passed, 20 skipped    # those tests skip without a database
+**Both store backends are held to one specification.** Store tests are parameterized over
+SQLite+FAISS and Postgres+pgvector and run against a real database whenever
+`TEST_DATABASE_URL` is set. CI provides one as a service container, so the same assertions
+verify both implementations; locally those cases skip.
+
+**Security behaviour is tested as behaviour.** Rate limits, token revocation, OAuth linking
+rules, SSRF rejection (including redirect hops), prompt-injection fencing, owner isolation on
+every workspace endpoint, body limits and error redaction each have tests that exercise the
+attack rather than the helper.
+
+### End-to-end
+
+`tests/e2e/test_ui_smoke.py` walks one researcher's whole journey in a real browser: sign up,
+create a project, search and import papers, take notes, ask a scoped question, generate a
+review, edit the document, export the project and check the zip, change the password and
+confirm the old one stops working.
+
+It is self-contained. `tests/e2e/demo_server.py` runs the real API and serves the built
+frontend, with a throwaway data directory, a canned LLM and stubbed paper sources, so no
+credentials or dev servers are needed:
+
+```bash
+cd frontend && npm ci && npm run build
+cd ../backend && uv run playwright install chromium
+E2E=1 uv run pytest tests/e2e -q
 ```
 
-CI additionally type-checks and builds the frontend, and validates the Docker image build on
-`main`.
+The same demo server is handy for looking at the interface by hand:
+`uv run python -m tests.e2e.demo_server --port 8765`.
+
+### CI
+
+| Job | What it checks |
+| --- | --- |
+| `backend` | Full test suite against Postgres+pgvector, then `pip-audit` on the locked production dependencies |
+| `frontend` | `npm audit` (high and above), type check, production build |
+| `e2e` | The UI journey above against the built frontend |
+| `docker` | The multi-stage image builds |
 
 ## Troubleshooting
 
@@ -1187,6 +1218,7 @@ git checkout -b feature/your-feature
 # 2. Verify before pushing
 cd backend  && uv run pytest -q
 cd frontend && npx tsc --noEmit && npm run build
+cd backend  && E2E=1 uv run pytest tests/e2e -q     # when you touched the UI
 ```
 
 Conventions that keep the suite fast and the review short:
@@ -1195,11 +1227,16 @@ Conventions that keep the suite fast and the review short:
   the established patterns. A test that needs network or credentials will not run in CI.
 - **New services get an injection point.** Follow the `set_*_service()` convention so
   endpoint tests can substitute a double.
-- **One commit per feature**, with a conventional subject: `feat(scope): add thing`.
+- **One issue per change, one commit per issue**, with a conventional subject that references
+  it: `feat(api): add thing (#12)`. Pull requests close their issues.
+- **UI strings go in `frontend/tools/strings.py`**, then `python3 tools/strings.py`
+  regenerates both dictionaries. Do not edit `src/i18n/*.ts` by hand.
+- **Anything stored or sent to the model gets a limit**, and anything owned by a user is
+  queried with that user's id. See [Security](#security).
 - **Optional dependencies degrade.** If a feature needs a key or a model, detect its absence
   and skip cleanly rather than raising.
 
-Open a pull request once CI is green (backend with pgvector, frontend build, Docker build).
+Open a pull request once CI is green (backend with pgvector, frontend, e2e, Docker build).
 
 ## License
 
