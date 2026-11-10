@@ -7,13 +7,13 @@
 A Full-Stack Open-Source Academic Research Assistant Platform Powered by Agentic AI and Deeply-Engineered Multi-Paradigm RAG.
 
 [![CI](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml/badge.svg)](https://github.com/ShiYu0318/ScholaRAGent/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-403%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-600%2B%20passing-brightgreen.svg)](#testing)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
-[![React](https://img.shields.io/badge/react-19-61dafb.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/react-18-61dafb.svg)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/api-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-[Quick start](#quick-start) · [Architecture](#architecture) · [How retrieval works](#how-retrieval-works) · [API](#api-reference) · [Contributing](#contributing)
+[Quick start](#quick-start) · [Research workflow](#the-research-workflow) · [Architecture](#architecture) · [API](#api-reference) · [Security](#security) · [Contributing](#contributing)
 
 </div>
 
@@ -23,17 +23,19 @@ A Full-Stack Open-Source Academic Research Assistant Platform Powered by Agentic
 
 - [Overview](#overview)
 - [Quick start](#quick-start)
+- [The research workflow](#the-research-workflow)
 - [Architecture](#architecture)
 - [How retrieval works](#how-retrieval-works)
 - [Knowledge graph](#knowledge-graph)
 - [Agentic workflows](#agentic-workflows)
 - [Evaluation](#evaluation)
 - [Features](#features)
-- [Web dashboard](#web-dashboard)
+- [Web interface](#web-interface)
 - [Discord bot](#discord-bot)
 - [API reference](#api-reference)
 - [Data model](#data-model)
 - [Configuration](#configuration)
+- [Security](#security)
 - [Deployment](#deployment)
 - [Project structure](#project-structure)
 - [Testing](#testing)
@@ -66,6 +68,12 @@ Retrieval spans two complementary representations of the same corpus:
 On top of that sit agentic workflows — multi-step research decomposition, self-reflective
 retrieval, and a multi-agent write-and-critique loop — plus a product layer that handles
 accounts, personalized ranking, scheduled digests, and analytics.
+
+All of it is organised around **research projects**. A project holds the papers, questions
+and documents for one research question, and the interface walks it through five stages —
+collect, read, ask, synthesize, write — so the path from "I need to understand this topic"
+to "here is my draft with its references" stays in one place. See
+[The research workflow](#the-research-workflow).
 
 ### Design principles
 
@@ -127,11 +135,60 @@ npm run dev                 # http://localhost:5173
 
 ### First steps
 
-1. Open the dashboard and create an account (or use Google/GitHub if OAuth is configured).
-2. **Library -> Fetch today** pulls and indexes the latest arXiv batch.
-3. Ask a question from **Ask** — the answer streams in with cited sources.
-4. From there: expand a citation graph in **Graph**, add RSS sources in **Library -> Feeds**,
-   set a digest schedule in **Settings**, and watch **Trends** populate as the corpus grows.
+1. Open the app and create an account (or use Google/GitHub if OAuth is configured).
+2. **New project** — give it a name and, optionally, the research question you are after.
+3. **Find papers** — search a topic and import the results you want, or paste arXiv IDs,
+   arXiv links or DOIs. Imported papers go straight into the project.
+4. Open a paper to read the abstract, set its reading state and leave notes.
+5. **Ask** — questions are answered from the project's papers only, with numbered citations.
+6. **Synthesize** — generate a literature review or comparison table and save it as a document.
+7. **Write** — keep editing the document, then **Export** the project as one bundle.
+
+The project page always shows which of these you have done and what comes next.
+
+To try the interface without any credentials, run the demo server — real API, canned LLM,
+throwaway data:
+
+```bash
+cd frontend && npm install && npm run build
+cd ../backend && uv run python -m tests.e2e.demo_server --port 8765   # http://127.0.0.1:8765
+```
+
+## The research workflow
+
+```mermaid
+flowchart LR
+    C["<b>Collect</b><br/>topic search · import by<br/>arXiv ID / DOI · RSS · daily fetch"]
+    R["<b>Read</b><br/>reading state · notes · tags<br/>citations · code links · walkthrough"]
+    A["<b>Ask</b><br/>scoped to the project<br/>follow-ups keep context"]
+    S["<b>Synthesize</b><br/>literature review · deep research<br/>comparison table · report"]
+    W["<b>Write</b><br/>Markdown editor · writing tools<br/>cited papers travel along"]
+    E["<b>Export</b><br/>references.bib · notes.md<br/>documents/"]
+    C --> R --> A --> S --> W --> E
+```
+
+| Stage | What you do | What carries over to the next stage |
+| --- | --- | --- |
+| **Collect** | Search arXiv by topic and import in bulk, paste identifiers, subscribe to RSS | Papers land in the project and, optionally, the reading list |
+| **Read** | Open a paper, mark it to-read / reading / done, write notes and tags | Notes are exported with the project; reading progress drives the trail |
+| **Ask** | Ask questions scoped to the project or to specific papers | Any answer can be saved as a note document with its citations |
+| **Synthesize** | Run a review, deep research, comparison or report over the project's papers | The result is saved as a document that remembers which papers it cites |
+| **Write** | Edit in Markdown, apply polish / review / LaTeX / slide tools to the text | Documents download as Markdown with references, or as BibTeX |
+| **Export** | Download the project | A zip with `README.md`, `references.bib`, `notes.md` and `documents/` |
+
+**Scope is explicit.** Asking and synthesizing take a source: the whole library, one project,
+or a chosen set of papers. Inside a scope, hybrid retrieval ranks the papers and tops up from
+the rest of the scope when there are too few hits, so an answer always rests on the papers
+you selected rather than on whatever else the shared library contains.
+
+**The next step is computed, not guessed.** `GET /api/projects/{id}/overview` derives each
+stage from what the project contains — papers, reading states, conversations, documents by
+kind — and returns the first stage that has not started. Saved Q&A notes count as material,
+not as writing; only an outline or a draft moves the trail to its last station.
+
+**What is shared and what is private.** The paper library is shared by all users of an
+instance. Reading states, notes, projects, conversations and documents belong to one user and
+are never visible to another.
 
 ## Architecture
 
@@ -451,18 +508,28 @@ POST /api/eval  {"engine": "judge"}     # LLM-judged, 503 without GROQ_API_KEY
 - Local/global query routing and community-report global search.
 
 ### Research workflow
+- **Projects** that group papers, conversations and documents around one research question,
+  with a computed next step and a one-click export bundle.
+- **Topic search and import** from arXiv, and import by arXiv ID, arXiv link or DOI (DOIs
+  resolve through OpenAlex).
+- **Scoped Q&A and synthesis** — restrict any question or tool to a project or chosen papers.
+- **Documents** — save any generated result as an editable Markdown draft that keeps its
+  cited papers; download as Markdown with a reference list, or as BibTeX.
 - Literature review generation with identified research gaps.
 - Multi-paper method comparison tables.
 - Guided deep-read explanations of dense papers.
 - Credibility signals from citation data and reproducibility signals from linked code.
-- Reading kanban (to-read / reading / done) with drag-and-drop, plus topic subscriptions.
-- Exports: BibTeX with generated keys, CSV, and Obsidian-ready Markdown with frontmatter and
+- Reading board (to-read / reading / done) with notes and tags per paper, plus topic
+  subscriptions.
+- Exports: BibTeX with unique generated keys, CSV, and Obsidian-ready Markdown with frontmatter and
   wikilinks (compatible with Juggl and Dataview).
 - Writing assistance: LaTeX drafts, slide outlines, polishing, contribution extraction,
   review suggestions, and submission checklists.
 
 ### Accounts, delivery, and personalization
-- **Auth** — email + password (bcrypt, JWT), Google and GitHub OAuth, Discord account linking.
+- **Auth** — email + password (bcrypt, JWT), Google and GitHub OAuth, Discord account linking;
+  password change revokes other sessions, and there is a sign-out-everywhere control.
+  See [Security](#security).
 - **Notification preferences** — frequency, delivery time, timezone, quiet hours, channels,
   and deduplication, all per user.
 - **Per-user scheduling** — APScheduler cron-schedules each user's digest from their
@@ -475,28 +542,45 @@ POST /api/eval  {"engine": "judge"}     # LLM-judged, 503 without GROQ_API_KEY
 - **Trend forecasting** — keyword time series with an LSTM sliding-window forecaster.
 - **Health monitoring** — store statistics, scheduler state, and provider-key readiness.
 
-## Web dashboard
+## Web interface
+
+Navigation follows the workflow rather than listing features: a sidebar grouped into
+**Collect**, **Research** and **Write**, with active projects listed underneath.
 
 | Page | Purpose |
 | --- | --- |
-| **Overview** | Card wall: today's papers, weekly digest, trends, to-read, recent conversations, reading analytics, system health |
-| **Ask** | Token-streamed Q&A over the corpus with adaptive retrieval and cited sources |
-| **Conversations** | Persistent history with search, rename, delete, and public share links |
-| **Research** | Deep research (live streamed), literature review, comparison, report, BibTeX, guided explain |
-| **Write** | Polish, contribution extraction, review suggestions, checklist, LaTeX draft, slide outline |
-| **Graph** | Interactive D3 citation and concept graphs with PageRank and communities; global search; table fallback |
-| **Library** | Paper list with credibility and reproducibility signals, fetch-today, personalized picks, reading kanban, RSS manager, exports |
-| **Trends** | Rising keywords by slope, per-keyword series with forecast, data-source status |
-| **Learning** | Topic-based learning path generation with progress; skill levels |
-| **Analytics** | Activity chart, action totals, reading pipeline, top topics |
-| **Settings** | Account, locale, theme, OAuth and Discord links, notification schedule, reminders, system status |
+| **Today** | The active project's research trail and next step; quick ask; reading queue; recommendations; recent documents and conversations |
+| **Discover** | Topic search with multi-select import into a project; import by identifier; recommendations; rising keywords with forecast; RSS feeds and daily fetch |
+| **Library** | Paper list with search; details drawer (abstract, citation count, code links, plain-language walkthrough); reading board; CSV / BibTeX / Obsidian export |
+| **Projects** | Every project with a compact trail; the project workspace has tabs for overview, papers, questions, documents and export |
+| **Ask** | Streamed answers with numbered citations; scope picker; conversation history; save as note; share and revoke links |
+| **Synthesize** | Literature review, deep research (with a live plan), comparison table, topic report — over a chosen source, saved as a document |
+| **Graph** | Concept graph, citation network with PageRank, and corpus-level questions; table view as an alternative to the graph |
+| **Write** | Document list and Markdown editor with preview and autosave; writing tools act on the selection or the document |
+| **Learning** / **Analytics** | Generated learning paths with progress and skill levels; activity, reading progress and topics |
+| **Settings** | Profile, password and sessions, linked accounts, theme and language, notification schedule, reminders, system status |
 
-**Interface design.** Built on [Primer React](https://primer.style/) in night mode: `#0d1117`
-canvas, `#30363d` hairlines, `#2f81f7` accent, 6px radii, GitHub-like information density.
-A day theme is one toggle away. Fully bilingual (EN/ZH) via react-i18next, with locale
-persisted to the user profile. `⌘K` opens a command palette. Streaming endpoints are consumed
-as `fetch` streams so requests can carry POST bodies and an Authorization header, which
-`EventSource` cannot do.
+`⌘K` opens a command palette that jumps to any page or project, or sends what you typed
+straight to **Ask** or **Discover**.
+
+**Interface design.** The interface is built for long reading and writing sessions, so it
+looks like paper on a desk rather than a dashboard: warm paper surfaces, ink-coloured text,
+and a single accent — the red of a marking pencil — reserved for actions and "you are here".
+Titles are set in a serif, controls in a sans, both from system font stacks so no font is
+fetched from a third party. Structure comes from hairline rules; only floating layers cast a
+shadow. Light is the default and a dark theme keeps the same hue.
+
+The recurring element is the **research trail**: five stations on a line. Stations you have
+passed are inked in, and the next one is circled in red. It appears on Today, on each project
+and in the project list, and it is the same component fed by the same overview endpoint.
+
+There is no component library. Tokens live in `src/styles/tokens.css`, components in
+`src/styles/components.css` and `src/ui/`. Dialogs and drawers are native `<dialog>` elements,
+so focus trapping and `Esc` come from the browser. The interface is bilingual (Traditional
+Chinese and English); both dictionaries are generated from `frontend/tools/strings.py`, which
+makes a key missing from one language impossible. Streaming endpoints are consumed as `fetch`
+streams so requests can carry POST bodies and an Authorization header, which `EventSource`
+cannot do.
 
 ## Discord bot
 
@@ -530,9 +614,11 @@ leaving it unset uses global sync, which can take up to an hour to propagate.
 
 ## API reference
 
-Every endpoint is browsable live at `/docs` (Swagger UI) and `/redoc`. Unless marked
+Every endpoint is browsable live at `/docs` (Swagger UI) and `/redoc` in development (both
+are off by default when `APP_ENV=production`). Unless marked
 **public**, endpoints require `Authorization: Bearer <JWT>` from register/login or OAuth.
-Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
+Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames. Requests over
+the rate limit get `429` with a `Retry-After` header; bodies over `MAX_BODY_BYTES` get `413`.
 
 ### Auth — `/auth`
 
@@ -541,7 +627,8 @@ Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
 | POST | `/auth/register` | Create an account, returns `{token, user}` — public |
 | POST | `/auth/login` | Sign in, returns `{token, user}` — public |
 | GET | `/auth/me` | Current user profile |
-| PATCH | `/auth/me` | Update `display_name`, `locale`, or password |
+| PATCH | `/auth/me` | Update `display_name` or `locale`. Changing `password` requires `current_password`, revokes all other tokens and returns a new `token` |
+| POST | `/auth/logout-all` | Revoke every token issued to this account |
 | GET | `/auth/providers` | Which OAuth providers are configured — public |
 | GET | `/auth/oauth/{provider}` | Begin Google/GitHub sign-in (302) — public |
 | GET | `/auth/oauth/{provider}/callback` | OAuth callback, redirects with token — public |
@@ -552,12 +639,13 @@ Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/api/ask` | **SSE** — streamed grounded answer; events: `conversation`, `token`, `citations`, `done` |
-| GET | `/api/conversations` | List conversations (`?query=` searches titles and messages) |
+| POST | `/api/ask` | **SSE** — streamed grounded answer; events: `conversation`, `token`, `citations`, `done`. Optional `project_id` or `paper_ids` restrict retrieval; `conversation_id` continues a conversation with its context |
+| GET | `/api/conversations` | List conversations (`?query=` searches titles and messages, `?project_id=` filters by project) |
 | GET | `/api/conversations/{id}` | One conversation with messages and citations |
 | PATCH | `/api/conversations/{id}` | Rename |
 | DELETE | `/api/conversations/{id}` | Delete (204) |
 | POST | `/api/conversations/{id}/share` | Create a public share link, returns `{token, url}` |
+| DELETE | `/api/conversations/{id}/share` | Revoke the link; sharing again issues a different token (204) |
 | GET | `/api/shared/{token}` | Read a shared conversation — public |
 
 ### Library and papers — `/api`
@@ -566,23 +654,53 @@ Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
 | --- | --- | --- |
 | GET | `/api/papers` | List papers (`?limit=&source=&query=`) with reproducibility signals |
 | GET | `/api/paper/{id}` | Paper detail with credibility and reproducibility signals |
+| GET | `/api/discover?query=` | Search arXiv by topic; each result carries `in_library`. Nothing is stored |
+| POST | `/api/papers/import` | Import by `refs` (arXiv ID, arXiv URL or DOI; up to 25). Optional `project_id` and `add_to_reading`. Returns `{imported, failed}` |
 | POST | `/api/daily` | Fetch today's arXiv batch, store and index it |
 | GET | `/api/daily/personalized` | Papers ranked against your interaction profile |
 | POST | `/api/interactions` | Log an interaction for recommendations (201) |
 | GET | `/api/reading` | Reading kanban items (`?state=to-read\|reading\|done`) |
 | POST | `/api/reading` | Add to the kanban (201) |
-| PATCH | `/api/reading/{paper_id}` | Move between states |
+| PATCH | `/api/reading/{paper_id}` | Update any of `state`, `tags`, `note`; omitted fields are left alone |
 | DELETE | `/api/reading/{paper_id}` | Remove (204) |
 | GET | `/api/export/csv` | Export the library as CSV |
 | GET | `/api/export/bibtex` | Export as BibTeX |
 | GET | `/api/export/obsidian` | Export as an Obsidian-ready Markdown archive |
+
+### Projects — `/api/projects`
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/projects` | Your projects with paper, document and conversation counts (`?include_archived=true`) |
+| POST | `/api/projects` | Create a project from `name` and optional `question` (201) |
+| GET | `/api/projects/{id}` | One project |
+| PATCH | `/api/projects/{id}` | Update `name`, `question` or `status` (`active` / `archived`) |
+| DELETE | `/api/projects/{id}` | Delete; its documents and conversations are kept and detached (204) |
+| GET | `/api/projects/{id}/papers` | Papers in the project, each with your `reading` state, tags and note |
+| POST | `/api/projects/{id}/papers` | Add library papers by `paper_ids` |
+| DELETE | `/api/projects/{id}/papers/{paper_id}` | Remove a paper from the project (204) |
+| GET | `/api/projects/{id}/overview` | Progress per stage, `next_step`, recent documents and conversations |
+| GET | `/api/projects/{id}/export` | Zip: `README.md`, `references.bib`, `notes.md`, `documents/*.md` |
+
+### Documents — `/api/documents`
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/documents` | Your documents with a 200-character excerpt (`?project_id=`) |
+| POST | `/api/documents` | Create from `title`, `content`, `kind`, optional `project_id` and `paper_ids` (201) |
+| GET | `/api/documents/{id}` | Full content plus the cited `papers` |
+| PATCH | `/api/documents/{id}` | Update any field; `project_id: null` detaches it from its project |
+| DELETE | `/api/documents/{id}` | Delete (204) |
+| GET | `/api/documents/{id}/export?format=md\|bib` | Markdown with a reference list, or BibTeX of the cited papers |
+
+Document kinds: `note`, `review`, `report`, `comparison`, `deep_research`, `outline`, `draft`.
 
 ### Feeds and subscriptions — `/api`
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/feeds` | Your RSS feeds |
-| POST | `/api/feeds` | Add a feed (201; 409 on duplicate) |
+| POST | `/api/feeds` | Add a feed (201; 409 on duplicate; 422 if the URL points at an internal address) |
 | PATCH | `/api/feeds/{id}` | Update title, category, or enabled state |
 | DELETE | `/api/feeds/{id}` | Remove (204) |
 | POST | `/api/feeds/refresh` | Fetch all enabled feeds into the library |
@@ -609,6 +727,10 @@ Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
 | POST | `/api/bibtex` | BibTeX for retrieved papers |
 | POST | `/api/explain` | Guided plain-language deep-read of one paper |
 | POST | `/api/write/{tool}` | `polish`, `contributions`, `review`, `checklist`, `latex`, `slides` |
+
+`deepresearch`, `litreview`, `compare`, `report`, `bibtex` and `write/{tool}` all accept
+`project_id` or `paper_ids` to use those papers as the source instead of searching the whole
+library. With a source set, `compare` and `bibtex` no longer need a `topic`.
 
 ### Insights — `/api`
 
@@ -640,17 +762,20 @@ Streaming endpoints emit Server-Sent Events as `data: {json}\n\n` frames.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/api/health` | Store stats, scheduler status, provider readiness (booleans only) — public |
+| GET | `/api/health` | Liveness (`status`, `version`) — public. Signed in: store stats, scheduler status and provider readiness as booleans |
 | GET | `/api/sources` | Data-source configuration status |
 | GET | `/api/memory` | Agent memory items (`?kind=&contains=&limit=`) |
 | POST | `/api/memory` | Add a memory item (201) |
 | POST | `/api/eval` | RAG evaluation — `engine=offline` or `engine=judge` |
-| POST | `/api/agent` | Tool-calling agent (503 without `GROQ_API_KEY`) |
+| POST | `/api/agent` | Tool-calling agent with per-user tasks and calendar files (503 without `GROQ_API_KEY`) |
 
 ## Data model
 
 One schema across both store backends. Vectors live in a FAISS index file locally and in a
-`paper_embeddings` table under Postgres; everything else is identical.
+`paper_embeddings` table under Postgres; everything else is identical. The workspace tables
+(`projects`, `project_papers`, `documents`) are implemented once in `store/workspace.py` and
+shared by both backends through three small adapter functions. New columns are added to
+existing databases at startup.
 
 ```mermaid
 erDiagram
@@ -663,6 +788,12 @@ erDiagram
     users ||--o{ learning_paths : follows
     users ||--o{ user_skills : has
     users ||--|| notification_preferences : configures
+    users ||--o{ projects : owns
+    users ||--o{ documents : writes
+    projects ||--o{ project_papers : collects
+    projects ||--o{ documents : groups
+    projects ||--o{ conversations : groups
+    papers ||--o{ project_papers : appears_in
     conversations ||--o{ messages : contains
     papers ||--o{ interactions : receives
     papers ||--o{ reading_list : appears_in
@@ -677,6 +808,7 @@ erDiagram
         string discord_id
         string display_name
         string locale
+        int token_version "bumped to revoke tokens"
     }
     papers {
         string id PK "arXiv id or slug"
@@ -699,6 +831,7 @@ erDiagram
     conversations {
         int id PK
         int user_id FK
+        int project_id FK "nullable"
         string title
         string share_token
         string created_at
@@ -763,6 +896,29 @@ erDiagram
         int user_id PK
         string skill PK
         int level "0-100"
+    }
+    projects {
+        int id PK
+        int user_id FK
+        string name
+        text question
+        string status "active, archived"
+        string updated_at
+    }
+    project_papers {
+        int project_id PK
+        string paper_id PK
+        string added_at
+    }
+    documents {
+        int id PK
+        int user_id FK
+        int project_id FK "nullable"
+        string kind "note, review, report, comparison, deep_research, outline, draft"
+        string title
+        text content "Markdown"
+        json paper_ids "cited papers"
+        string updated_at
     }
     paper_embeddings {
         string paper_id FK
@@ -864,8 +1020,10 @@ backend/                 Python backend — run all uv commands from here
   src/
     config.py            Settings loaded from backend/.env
     config_report.py     Startup readiness and degraded-feature report
-    api/                 app, deps, auth, routers/ (14), services/ (5)
-    store/               base (interface), sqlite_faiss, postgres_pgvector
+    api/                 app, deps, auth, ratelimit, middleware, validators,
+                         routers/ (16), services/ (5)
+    store/               base (interface), workspace (shared SQL), sqlite_faiss,
+                         postgres_pgvector
     scheduler.py         Per-user digest and reminder scheduling
     crawlers/            arxiv, news, hackernews, reddit, github, twitter, openalex
     llm/                 groq_client, key_rotator
@@ -878,19 +1036,27 @@ backend/                 Python backend — run all uv commands from here
     analysis/            trends, lstm_forecaster
     recommend/           ranker, reward, personalize, reading_list, credibility,
                          reproducibility, subscriptions
-    tools/               registry, builtins, research_tools, writing_tools,
+    tools/               registry, builtins, research_tools, writing_tools, paper_refs,
                          task_manager, calendar_ics, obsidian_export
-    memory/  notify/  db/  utils/  bot/
-  tests/                 73 offline test modules + tests/e2e (Playwright)
+    utils/               safe_http (SSRF guard), text_safety, logger, query_log
+    memory/  notify/  db/  bot/
+  tests/                 offline test modules + tests/e2e (demo server and UI journey)
   data/                  Generated index, metadata, SQLite database
-frontend/                React 19 + Vite + TypeScript + Primer
-  src/pages/             14 route components
-  src/components/        Shell, Card, ForceGraph, BarChart, CommandPalette, Markdown
-  src/lib/               api, auth, sse clients
-  src/i18n/              EN/ZH translations
+frontend/                React 18 + Vite + TypeScript, no component library
+  src/pages/             15 route components
+  src/components/        Shell, CommandPalette, ResearchTrail, NextStep, Paper (row,
+                         drawer, add-to-project), ScopePicker, SaveDocument, ProjectForm,
+                         Citations, Markdown, ForceGraph, BarChart
+  src/ui/                Base components (button, input, tabs, dialog, drawer, menu, toast)
+  src/styles/            tokens.css, base.css, components.css
+  src/lib/               api, auth, sse, theme, shared types and queries
+  src/i18n/              zh.ts and en.ts, generated — do not edit by hand
+  tools/strings.py       Single source for UI strings; generates both dictionaries
 Dockerfile               Multi-stage: frontend dist baked into the API image
 docker-compose.yml       Single container; optional Postgres via --profile postgres
-.github/workflows/       CI: backend (with pgvector), frontend, Docker build
+.github/workflows/       CI: backend (with pgvector), frontend, e2e, Docker build
+.github/dependabot.yml   Weekly dependency updates
+SECURITY.md              Reporting a vulnerability, production checklist
 ```
 
 ## Testing
