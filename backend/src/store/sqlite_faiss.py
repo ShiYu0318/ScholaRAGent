@@ -8,6 +8,7 @@ import json
 import secrets
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from src import config
@@ -164,12 +165,11 @@ class SqliteFaissStore(Store):
     def __init__(self, db_path=None, embedder=None, vector_store=None):
         self.logger = get_logger(self.__class__.__name__)
         self.path = str(db_path or config.DB_PATH)
+        # 寫入以鎖序列化；讀取各執行緒用自己的連線（見 _conn）
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(self.path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA foreign_keys = ON")
-        self._conn.execute("PRAGMA busy_timeout = 5000")
-        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._local = threading.local()
+        self._connections = []
+        self._connections_lock = threading.Lock()
         self._conn.executescript(_SCHEMA)
         self._conn.executescript(
             WORKSPACE_SCHEMA.format(pk="INTEGER PRIMARY KEY AUTOINCREMENT"))
@@ -178,6 +178,26 @@ class SqliteFaissStore(Store):
         self._embedder = embedder
         self._vs = vector_store
         self.logger.info(f"SQLite+FAISS store 就緒：{self.path}")
+
+    @property
+    def _conn(self):
+        """目前執行緒專屬的連線。
+
+        API 的同步端點跑在執行緒池裡；多個執行緒共用同一條 sqlite3 連線時，
+        查詢會互相踩到彼此的游標（API misuse、拿到別的查詢的資料列）。
+        WAL 模式允許多個讀取者同時進行，所以每個執行緒各開一條連線即可。
+        """
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA busy_timeout = 10000")
+            conn.execute("PRAGMA journal_mode = WAL")
+            self._local.conn = conn
+            with self._connections_lock:
+                self._connections.append(conn)
+        return conn
 
     # 既有資料庫補欄位（CREATE TABLE IF NOT EXISTS 不會更動舊表）
     _MIGRATIONS = (
@@ -199,11 +219,25 @@ class SqliteFaissStore(Store):
             self._vs = VectorStore(embedder=self._embedder)
         return self._vs
 
-    def _write(self, sql, params=()):
+    @contextmanager
+    def _tx(self):
+        """寫入交易：成功就提交，失敗一定回滾。
+
+        每個執行緒有自己的連線，沒回滾的失敗交易會一直佔著寫入鎖，
+        讓其他執行緒的寫入全部卡到逾時（database is locked）。
+        """
         with self._lock:
-            cur = self._conn.execute(sql, params)
-            self._conn.commit()
-            return cur
+            conn = self._conn
+            try:
+                yield conn
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+
+    def _write(self, sql, params=()):
+        with self._tx() as conn:
+            return conn.execute(sql, params)
 
     # WorkspaceMixin 的轉接層
     def _q(self, sql, params=()):
@@ -265,7 +299,7 @@ class SqliteFaissStore(Store):
     def upsert_papers(self, papers):
         added = 0
         for p in papers:
-            with self._lock:
+            with self._tx():
                 existed = self._conn.execute(
                     "SELECT 1 FROM papers WHERE id = ?", (p["id"],)
                 ).fetchone()
@@ -477,7 +511,7 @@ class SqliteFaissStore(Store):
         return cur.rowcount > 0
 
     def delete_conversation(self, conv_id, user_id):
-        with self._lock:
+        with self._tx():
             cur = self._conn.execute(
                 "DELETE FROM conversations WHERE id = ? AND user_id = ?", (conv_id, user_id)
             )
@@ -487,7 +521,7 @@ class SqliteFaissStore(Store):
 
     def add_message(self, conv_id, role, content, citations=None):
         now = _now()
-        with self._lock:
+        with self._tx():
             cur = self._conn.execute(
                 "INSERT INTO messages (conversation_id, role, content, citations, created_at)"
                 " VALUES (?, ?, ?, ?, ?)",
@@ -735,4 +769,11 @@ class SqliteFaissStore(Store):
         }
 
     def close(self):
-        self._conn.close()
+        with self._connections_lock:
+            for conn in self._connections:
+                try:
+                    conn.close()
+                except sqlite3.Error:
+                    pass
+            self._connections.clear()
+        self._local = threading.local()
