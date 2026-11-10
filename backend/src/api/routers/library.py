@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.library import get_library_service
 from src.store.base import Store
@@ -31,7 +32,7 @@ class DailyBody(BaseModel):
     count: int | None = Field(default=None, ge=1, le=50)
 
 
-@router.post("/daily")
+@router.post("/daily", dependencies=[Depends(heavy_limit)])
 def fetch_daily(body: DailyBody | None = None, _user=Depends(get_current_user)):
     return get_library_service().daily(count=body.count if body else None)
 

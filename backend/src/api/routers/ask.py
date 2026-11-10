@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.ask import get_ask_service
 from src.store.base import Store
@@ -22,7 +23,7 @@ def sse(payload):
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(llm_limit)])
 def ask(body: AskBody, user=Depends(get_current_user), store: Store = Depends(get_store)):
     service = get_ask_service()
     question = body.question.strip()

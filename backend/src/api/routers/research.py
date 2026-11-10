@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user
 from src.api.routers.ask import sse
 from src.api.services.research import get_research_service
@@ -27,7 +28,7 @@ class DeepResearchBody(BaseModel):
     k: int = Field(default=4, ge=1, le=10)
 
 
-@router.post("/deepresearch")
+@router.post("/deepresearch", dependencies=[Depends(heavy_limit)])
 def deepresearch(body: DeepResearchBody, _user=Depends(get_current_user)):
     service = get_research_service()
 
@@ -44,12 +45,12 @@ def deepresearch(body: DeepResearchBody, _user=Depends(get_current_user)):
                                       "X-Accel-Buffering": "no"})
 
 
-@router.post("/litreview")
+@router.post("/litreview", dependencies=[Depends(llm_limit)])
 def litreview(body: TopicBody, _user=Depends(get_current_user)):
     return get_research_service().litreview(body.topic, k=body.k)
 
 
-@router.post("/compare")
+@router.post("/compare", dependencies=[Depends(llm_limit)])
 def compare(body: CompareBody, _user=Depends(get_current_user)):
     if not body.topic and not body.paper_ids:
         raise HTTPException(status_code=422, detail="需提供 topic 或 paper_ids")
@@ -57,7 +58,7 @@ def compare(body: CompareBody, _user=Depends(get_current_user)):
                                           k=body.k)
 
 
-@router.post("/report")
+@router.post("/report", dependencies=[Depends(llm_limit)])
 def report(body: TopicBody, _user=Depends(get_current_user)):
     return get_research_service().report(body.topic, k=body.k)
 
@@ -69,7 +70,7 @@ def bibtex(body: CompareBody, _user=Depends(get_current_user)):
     return get_research_service().bibtex(topic=body.topic, paper_ids=body.paper_ids)
 
 
-@router.post("/explain")
+@router.post("/explain", dependencies=[Depends(llm_limit)])
 def explain(body: dict, _user=Depends(get_current_user)):
     paper_id = (body or {}).get("paper_id", "")
     if not paper_id:

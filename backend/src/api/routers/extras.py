@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from src import config
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.rag.evaluation import faithfulness, precision_at_k, recall, reciprocal_rank
 from src.store.base import Store
@@ -107,7 +108,7 @@ class EvalBody(BaseModel):
     ground_truth: str | None = None
 
 
-@router.post("/eval")
+@router.post("/eval", dependencies=[Depends(llm_limit)])
 def evaluate(body: EvalBody, user=Depends(get_current_user)):
     if body.engine == "judge":
         if not (body.question and body.answer and body.contexts):
@@ -163,7 +164,7 @@ class AgentBody(BaseModel):
     max_steps: int = Field(default=5, ge=1, le=10)
 
 
-@router.post("/agent")
+@router.post("/agent", dependencies=[Depends(llm_limit)])
 def run_agent(body: AgentBody, user=Depends(get_current_user)):
     answer = get_tool_agent().run(body.message, max_steps=body.max_steps)
     return {"answer": answer}

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.library import get_library_service
 from src.store.base import Store
@@ -53,7 +54,7 @@ def delete_feed(feed_id: int, user=Depends(get_current_user),
         raise HTTPException(status_code=404, detail="feed 不存在")
 
 
-@router.post("/feeds/refresh")
+@router.post("/feeds/refresh", dependencies=[Depends(heavy_limit)])
 def refresh_feeds(user=Depends(get_current_user)):
     return get_library_service().refresh_feeds(user["id"])
 

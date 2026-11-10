@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src import config
+from src.api.ratelimit import RateLimiter
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
 from src.api.routers import conversations as conversations_router
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
         version="2.0.0",
         lifespan=_lifespan,
     )
+    app.state.limiter = RateLimiter()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.CORS_ORIGINS,

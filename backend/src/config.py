@@ -75,6 +75,14 @@ JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 預設 7 �
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# 部署在反向代理後方時設 1，才信任 X-Forwarded-For / X-Forwarded-Proto
+TRUST_PROXY = os.getenv("TRUST_PROXY", "0") in ("1", "true", "True")
+# 限流（行程內滑動視窗）
+RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "1") in ("1", "true", "True")
+RATE_LIMIT_LOGIN_PER_MIN = int(os.getenv("RATE_LIMIT_LOGIN_PER_MIN", "10"))
+RATE_LIMIT_REGISTER_PER_HOUR = int(os.getenv("RATE_LIMIT_REGISTER_PER_HOUR", "20"))
+RATE_LIMIT_LLM_PER_MIN = int(os.getenv("RATE_LIMIT_LLM_PER_MIN", "30"))
+RATE_LIMIT_HEAVY_PER_MIN = int(os.getenv("RATE_LIMIT_HEAVY_PER_MIN", "6"))
 # OAuth（金鑰未設定則該登入方式自動隱藏）
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")

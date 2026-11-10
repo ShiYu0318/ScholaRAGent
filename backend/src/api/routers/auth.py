@@ -6,9 +6,14 @@ from pydantic import BaseModel, EmailStr, Field
 from src import config
 from src.api import auth as auth_lib
 from src.api.deps import get_current_user, get_store, public_user
+from src.api.ratelimit import limit_ip
 from src.store.base import Store
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+login_limit = limit_ip("login", config.RATE_LIMIT_LOGIN_PER_MIN, 60)
+register_limit = limit_ip("register", config.RATE_LIMIT_REGISTER_PER_HOUR, 3600)
+oauth_limit = limit_ip("oauth", 30, 60)
 
 
 class RegisterBody(BaseModel):
@@ -33,7 +38,7 @@ def _token_response(user):
     return {"token": auth_lib.create_token(user["id"]), "user": public_user(user)}
 
 
-@router.post("/register", status_code=201)
+@router.post("/register", status_code=201, dependencies=[Depends(register_limit)])
 def register(body: RegisterBody, store: Store = Depends(get_store)):
     try:
         user = store.create_user(
@@ -47,7 +52,7 @@ def register(body: RegisterBody, store: Store = Depends(get_store)):
     return _token_response(user)
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(login_limit)])
 def login(body: LoginBody, store: Store = Depends(get_store)):
     user = store.get_user_by_email(body.email)
     if not user or not auth_lib.verify_password(body.password, user["password_hash"]):
@@ -87,7 +92,7 @@ def _require_provider(provider):
         raise HTTPException(status_code=404, detail=f"{provider} 登入未啟用（缺金鑰）")
 
 
-@router.get("/oauth/{provider}")
+@router.get("/oauth/{provider}", dependencies=[Depends(oauth_limit)])
 def oauth_start(provider: str):
     """導向供應商授權頁（登入模式）。"""
     _require_provider(provider)
@@ -111,7 +116,7 @@ def discord_unlink(user=Depends(get_current_user), store: Store = Depends(get_st
     return public_user(updated)
 
 
-@router.get("/oauth/{provider}/callback")
+@router.get("/oauth/{provider}/callback", dependencies=[Depends(oauth_limit)])
 def oauth_callback(provider: str, code: str = "", state: str = "",
                    store: Store = Depends(get_store)):
     _require_provider(provider)

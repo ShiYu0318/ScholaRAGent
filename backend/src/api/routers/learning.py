@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.product import get_product_service
 from src.store.base import Store
@@ -30,7 +31,7 @@ def list_paths(user=Depends(get_current_user), store: Store = Depends(get_store)
     return {"items": store.list_learning_paths(user["id"])}
 
 
-@router.post("/learning-paths", status_code=201)
+@router.post("/learning-paths", status_code=201, dependencies=[Depends(llm_limit)])
 def create_path(body: PathBody, user=Depends(get_current_user)):
     return get_product_service().generate_learning_path(
         user["id"], body.topic, steps=body.steps)
