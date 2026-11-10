@@ -318,6 +318,7 @@ export default {
           "placeholder": "Report topic"
         }
       },
+      "titled": "{{tool}}: {{topic}}",
       "topic": "Topic",
       "topicOptional": "Topic (optional — leave blank to compare everything in scope)",
       "source": "Source",

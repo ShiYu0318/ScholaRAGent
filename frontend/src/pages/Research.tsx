@@ -107,7 +107,8 @@ export function Research() {
   const output = tool === "deep" ? deepMarkdown : result;
   const done = !busy && output.length > 0;
   const meta = TOOLS.find((x) => x.key === tool)!;
-  const title = `${t(`research.tool.${tool}.name`)}${ranTopic ? `：${ranTopic}` : ""}`;
+  const toolName = t(`research.tool.${tool}.name`);
+  const title = ranTopic ? t("research.titled", { tool: toolName, topic: ranTopic }) : toolName;
 
   return (
     <div className="stack-lg">

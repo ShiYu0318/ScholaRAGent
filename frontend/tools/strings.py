@@ -292,6 +292,7 @@ S = {
     "research.tool.report.name": ("主題報告", "Topic report"),
     "research.tool.report.body": ("概述、重點論文與趨勢", "Overview, key papers and trends"),
     "research.tool.report.placeholder": ("報告的主題", "Report topic"),
+    "research.titled": ("{{tool}}：{{topic}}", "{{tool}}: {{topic}}"),
     "research.topic": ("主題", "Topic"),
     "research.topicOptional": ("主題（選填，留空則比較來源內的所有文獻）", "Topic (optional — leave blank to compare everything in scope)"),
     "research.source": ("文獻來源", "Source"),
