@@ -83,7 +83,8 @@ def page(base_url):
             "localStorage.setItem('scholaragent.locale','en');"
             "localStorage.setItem('scholaragent.theme','light');")
         pg = context.new_page()
-        pg.set_default_timeout(10_000)
+        pg.set_default_timeout(15_000)
+        expect.set_options(timeout=15_000)      # CI runners are slower than a laptop
         errors = []
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
