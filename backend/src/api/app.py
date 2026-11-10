@@ -6,7 +6,8 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -28,6 +29,9 @@ from src.api.routers import notifications as notifications_router
 from src.api.routers import reminders as reminders_router
 from src.api.routers import research as research_router
 from src.api.routers import write as write_router
+from src.utils.logger import get_logger
+
+logger = get_logger("api")
 
 
 @asynccontextmanager
@@ -64,6 +68,12 @@ def create_app() -> FastAPI:
     )
     # 最後加入＝最外層：連 CORS 預檢與 413 回應都帶安全標頭
     app.add_middleware(SecurityHeadersMiddleware)
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception):
+        # 未預期的例外：細節只進日誌，用戶端拿到固定訊息
+        logger.error(f"未處理的例外 {request.method} {request.url.path}", exc_info=exc)
+        return JSONResponse(status_code=500, content={"detail": "伺服器內部錯誤"})
+
     app.include_router(auth_router.router)
     app.include_router(health_router.router)
     app.include_router(ask_router.router)

@@ -89,8 +89,8 @@ def reading_add(body: ReadingBody, user=Depends(get_current_user),
     try:
         return store.reading_upsert(user["id"], body.paper_id, title,
                                     state=body.state, tags=body.tags, note=body.note)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="無效的閱讀狀態")
 
 
 @router.patch("/reading/{paper_id}")
@@ -98,8 +98,8 @@ def reading_set_state(paper_id: str, body: ReadingStateBody,
                       user=Depends(get_current_user), store: Store = Depends(get_store)):
     try:
         ok = store.reading_set_state(user["id"], paper_id, body.state)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="無效的閱讀狀態")
     if not ok:
         raise HTTPException(status_code=404, detail="閱讀項目不存在")
     return {"ok": True}

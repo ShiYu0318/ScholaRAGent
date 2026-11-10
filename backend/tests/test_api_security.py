@@ -130,3 +130,28 @@ def test_normal_body_passes(api, tmp_path, monkeypatch):
         assert resp.status_code == 201
     finally:
         extras.set_memory(prev)
+
+
+# ---- 未處理例外 ----
+def test_unhandled_exception_returns_generic_500(tmp_path, fake_embedder, monkeypatch):
+    from src.api.app import create_app
+    from src.api.services import library as library_module
+
+    store = SqliteFaissStore(db_path=tmp_path / "api.db", embedder=fake_embedder)
+    prev = store_module.set_store(store)
+
+    class Boom:
+        def papers(self, **kwargs):
+            raise RuntimeError("/srv/secret/path/key.pem not found")
+
+    prev_service = library_module.set_library_service(Boom())
+    try:
+        client = TestClient(create_app(), raise_server_exceptions=False)
+        resp = client.get("/api/papers", headers=_token(client))
+        assert resp.status_code == 500
+        assert resp.json() == {"detail": "伺服器內部錯誤"}
+        assert "secret" not in resp.text
+    finally:
+        library_module.set_library_service(prev_service)
+        store_module.set_store(prev)
+        store.close()

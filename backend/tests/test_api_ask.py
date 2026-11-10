@@ -133,3 +133,31 @@ def test_share_and_public_read(api, auth):
     assert "user_id" not in body
 
     assert api.get("/api/shared/bogus-token").status_code == 404
+
+
+def test_stream_errors_do_not_leak_exception_details(api, auth):
+    class Boom(StubAskService):
+        def retrieve(self, question, k=4):
+            raise RuntimeError("postgresql://air:s3cret@db:5432 connection refused")
+
+    prev = ask_module.set_ask_service(Boom())
+    try:
+        resp = api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    finally:
+        ask_module.set_ask_service(prev)
+    assert "s3cret" not in resp.text and "postgresql" not in resp.text
+    assert '"type": "error"' in resp.text
+
+
+def test_generation_errors_do_not_leak_exception_details(api, auth):
+    class Boom(StubAskService):
+        def stream(self, question, papers):
+            yield "部分"
+            raise RuntimeError("Authorization: Bearer gsk_live_secret")
+
+    prev = ask_module.set_ask_service(Boom())
+    try:
+        resp = api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    finally:
+        ask_module.set_ask_service(prev)
+    assert "gsk_live_secret" not in resp.text

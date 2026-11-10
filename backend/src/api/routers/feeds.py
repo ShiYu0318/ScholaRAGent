@@ -48,7 +48,7 @@ def add_feed(body: FeedBody, user=Depends(get_current_user),
         return store.add_feed(user["id"], url, title=body.title,
                               category=body.category)
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail="此 feed 已存在")
 
 
 @router.patch("/feeds/{feed_id}")

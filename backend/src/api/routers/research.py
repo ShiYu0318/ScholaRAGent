@@ -7,8 +7,10 @@ from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user
 from src.api.routers.ask import sse
 from src.api.services.research import get_research_service
+from src.utils.logger import get_logger
 
 router = APIRouter(prefix="/api", tags=["research"])
+logger = get_logger("api.research")
 
 
 class TopicBody(BaseModel):
@@ -37,8 +39,9 @@ def deepresearch(body: DeepResearchBody, _user=Depends(get_current_user)):
             for event in service.stream_deepresearch(body.topic, max_subs=body.max_subs,
                                                      k=body.k):
                 yield sse(event)
-        except Exception as e:
-            yield sse({"type": "error", "message": f"深度研究失敗：{e}"})
+        except Exception:
+            logger.exception("深度研究失敗")
+            yield sse({"type": "error", "message": "深度研究失敗，請稍後再試"})
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",
