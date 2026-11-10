@@ -143,12 +143,17 @@ def test_overview_walks_through_the_research_stages(api, auth):
              json={"title": "Survey", "kind": "review", "project_id": p["id"]})
     assert overview()["next_step"] == "write"
 
+    # 存下來的筆記是素材，不算開始寫作
+    api.post("/api/documents", headers=auth,
+             json={"title": "Saved answer", "kind": "note", "project_id": p["id"]})
+    assert overview()["next_step"] == "write"
+
     api.post("/api/documents", headers=auth,
              json={"title": "Paper draft", "kind": "draft", "project_id": p["id"]})
     o = overview()
     assert o["next_step"] == "export"
     assert all(stage["done"] for stage in o["stages"].values())
-    assert [d["title"] for d in o["recent_documents"]] == ["Paper draft", "Survey"]
+    assert [d["title"] for d in o["recent_documents"]] == ["Paper draft", "Saved answer", "Survey"]
     assert o["recent_conversations"][0]["title"] == "Q1"
 
 
