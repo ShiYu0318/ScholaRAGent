@@ -105,16 +105,24 @@ git clone https://github.com/ShiYu0318/ScholaRAGent.git
 cd ScholaRAGent
 
 cp backend/.env.example backend/.env
-# Set GROQ_API_KEY at minimum
+# Set GROQ_API_KEY and JWT_SECRET (openssl rand -hex 32)
+
+mkdir -p backend/data && sudo chown -R 10001 backend/data   # the container runs as uid 10001
 
 docker compose up --build                      # SQLite + FAISS, data in ./backend/data
-docker compose --profile postgres up --build   # Postgres + pgvector instead
+POSTGRES_PASSWORD=... docker compose --profile postgres up --build   # Postgres + pgvector
 ```
 
-Web UI and API: `http://localhost:8000` · Interactive API docs: `http://localhost:8000/docs`
+Compose starts the API with `APP_ENV=production`, so it will not come up without a
+`JWT_SECRET` of at least 32 characters. To experiment without one, run
+`APP_ENV=development docker compose up`.
+
+Web UI and API: `http://localhost:8000` · Interactive API docs (development only):
+`http://localhost:8000/docs`
 
 For the Postgres profile, also set `STORE_BACKEND=postgres` and `DATABASE_URL` in
-`backend/.env`.
+`backend/.env`, using the same password as `POSTGRES_PASSWORD`. The database port is
+published on `127.0.0.1` only.
 
 ### Option 2 — Local development
 
@@ -933,7 +941,8 @@ Settings live in `backend/.env`, which is never committed. The minimum working s
 ```bash
 GROQ_API_KEY=your-groq-api-key       # required
 
-JWT_SECRET=$(openssl rand -hex 32)   # recommended: ephemeral if unset
+JWT_SECRET=$(openssl rand -hex 32)   # required when APP_ENV=production
+APP_ENV=development                  # production enforces the checks below
 SCHEDULER_ENABLED=1                  # per-user digests and reminders
 STORE_BACKEND=sqlite                 # or postgres, with DATABASE_URL
 ```
@@ -959,25 +968,90 @@ Everything else is optional and safely skipped when unset.
 | `LINE_CHANNEL_TOKEN` / `LINE_TO` | | LINE delivery (Messaging API) |
 | `GITHUB_TOKEN` | | Raises GitHub API rate limits |
 | `X_BEARER_TOKEN` | | X/Twitter crawler (X API v2 requires a paid plan) |
-| `JWT_SECRET` | | Auth secret; ephemeral if unset, so set it in production |
+| `APP_ENV` | | `development` (default) or `production`. Production refuses to start without a `JWT_SECRET` of 32+ characters or with a wildcard CORS origin, and turns the API docs off |
+| `JWT_SECRET` | prod | Auth secret; ephemeral if unset in development |
 | `JWT_EXPIRE_MINUTES` | | Token lifetime (default 7 days) |
 | `CORS_ORIGINS` / `API_PUBLIC_URL` / `FRONTEND_URL` | | Deployment URLs |
 | `GOOGLE` / `GITHUB` / `DISCORD_CLIENT_ID` and `_SECRET` | | OAuth sign-in and Discord linking |
 | `STORE_BACKEND` / `DATABASE_URL` | | `sqlite` (default) or `postgres` |
 | `SCHEDULER_ENABLED` | | Per-user digest and reminder scheduler |
+| `TRUST_PROXY` | | `1` to trust `X-Forwarded-For` from your reverse proxy (default off) |
+| `RATE_LIMIT_ENABLED` | | Turn rate limiting off with `0` (default on) |
+| `RATE_LIMIT_LOGIN_PER_MIN` / `RATE_LIMIT_REGISTER_PER_HOUR` | | Per-IP limits (default 10 / 20) |
+| `RATE_LIMIT_LLM_PER_MIN` / `RATE_LIMIT_HEAVY_PER_MIN` | | Per-user limits for LLM calls and heavy operations (default 30 / 6) |
+| `MAX_BODY_BYTES` | | Request body limit (default 1048576) |
+| `API_DOCS_ENABLED` | | Serve `/docs` and `/redoc` (default on in development, off in production) |
+| `POSTGRES_PASSWORD` | compose | Password for the bundled Postgres; read by Docker Compose, no default |
 
 **Notes.** The arXiv, news, Hacker News, Reddit, and GitHub crawlers need no credentials.
 Telegram, Email, LINE, OAuth, and X/Twitter activate only once their keys are present.
 Changing `EMBED_MODEL` changes vector dimensionality; the store detects the mismatch and
 rebuilds the index automatically. Leaving `JWT_SECRET` unset generates a random secret at
-startup, which invalidates every existing token on restart — acceptable locally, not in
-production.
+startup, which invalidates every existing token on restart — acceptable locally; with
+`APP_ENV=production` the API refuses to start instead.
+
+## Security
+
+To report a vulnerability, and for a pre-production checklist, see [SECURITY.md](SECURITY.md).
+
+**Authentication and sessions.** Passwords are hashed with bcrypt; passwords longer than
+bcrypt's 72-byte input are pre-hashed with SHA-256 so no entropy is dropped. Sessions are
+HS256 JWTs carrying a `token_version`. Changing the password requires the current one, bumps
+the version — invalidating every other token — and returns a fresh token for the device that
+made the change. `POST /auth/logout-all` does the same without a password change. In
+production the API will not start with a missing or short `JWT_SECRET`.
+
+**OAuth.** A provider login is linked to an existing account only when the provider reports
+the email as verified; an unverified match is rejected instead of silently merged. The
+`state` parameter is a signed token containing the hash of a nonce, and the nonce itself sits
+in an HttpOnly, SameSite cookie, so a callback only completes in the browser that started it.
+
+**Rate limiting.** Sliding-window counters keyed by IP for sign-in, sign-up and OAuth, and by
+user for LLM calls, with a tighter limit for heavy operations (deep research, daily fetch,
+feed refresh, graph rebuild). Limits are configurable; `X-Forwarded-For` is honoured only
+when `TRUST_PROXY=1`.
+
+**Outbound requests.** RSS URLs come from users, so every fetch goes through
+`utils/safe_http.py`: http(s) only, no credentials in the URL, the host must resolve
+exclusively to public addresses, redirects are followed manually and re-checked at each hop,
+and the response is capped at 2 MB. Feeds are parsed with `defusedxml`. Papers are imported
+by identifier only — the server fetches the content from arXiv or OpenAlex itself, so a
+client cannot write arbitrary text into the shared library.
+
+**Prompt injection.** Abstracts and feed items are untrusted. They are wrapped in `<paper>`
+tags, stripped of anything resembling those tags, truncated, and every system prompt carries
+a rule that text inside them is data, never instructions.
+
+**Data isolation.** Projects, documents, conversations, reading lists, reminders and agent
+tool state are owned by a user, and every query is scoped by that owner; asking for someone
+else's id returns 404 rather than 403, so existence is not revealed. The SQLite backend uses
+one connection per thread, so concurrent requests cannot see each other's rows.
+
+**Browser hardening.** Every response carries a Content-Security-Policy that allows scripts
+only from the same origin, plus `X-Content-Type-Options`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer` and, over HTTPS, HSTS. API responses are `no-store`. Markdown
+is rendered without raw HTML, links open with `noopener noreferrer`, and only http(s) links
+are stored for ingested items. CSV exports neutralise formula prefixes.
+
+**Input and errors.** Request bodies are capped (1 MB by default, including chunked uploads),
+and every field that is stored or sent to the model has a length or count limit. Errors
+return a generic message; the detail goes to the server log only. Unauthenticated
+`/api/health` reports liveness and nothing else.
+
+**Supply chain and runtime.** CI runs `pip-audit` on the locked production dependencies and
+`npm audit` on the frontend; Dependabot proposes weekly updates. The container runs as a
+non-root user on a read-only root filesystem with all capabilities dropped.
 
 ## Deployment
 
 The Docker build is multi-stage: the frontend compiles in a Node stage and its `dist` output
 is copied into the Python image, which FastAPI serves as static files behind the API routes.
 One container, one port.
+
+The container runs as an unprivileged user (uid 10001) on a read-only root filesystem with
+all Linux capabilities dropped and privilege escalation disabled; only the data volume and
+`/tmp` are writable. A healthcheck polls `/api/health`. Put a TLS-terminating reverse proxy
+in front and set `TRUST_PROXY=1` so rate limits see real client addresses.
 
 ```mermaid
 flowchart TB
@@ -1001,7 +1075,8 @@ flowchart TB
     UV --> EXT
 ```
 
-**Scaling notes.** The default `IndexFlatIP` is exact and fine well past tens of thousands
+**Scaling notes.** Rate-limit counters, like the scheduler state below, live in the API
+process — with several replicas, rate limit at the proxy. The default `IndexFlatIP` is exact and fine well past tens of thousands
 of papers; switch `INDEX_TYPE=hnsw` when approximate search becomes worth the recall
 tradeoff. The scheduler holds in-process state (dedupe sets, fired-reminder ids), so running
 multiple API replicas with `SCHEDULER_ENABLED=1` would duplicate digests — run the scheduler
@@ -1089,7 +1164,14 @@ CI additionally type-checks and builds the frontend, and validates the Docker im
 | --- | --- |
 | `503` from `/api/agent` or `/api/eval?engine=judge` | No `GROQ_API_KEY`. These endpoints require generation and refuse rather than returning degraded output. |
 | Every token invalid after a restart | `JWT_SECRET` is unset, so a random one is generated per start. Set it. |
-| Retrieval returns nothing | The corpus is empty. Run **Library -> Fetch today** or `POST /api/daily`. |
+| API exits at startup with "production 設定不安全" | `APP_ENV=production` with a missing or short `JWT_SECRET`, or `CORS_ORIGINS=*`. Fix the setting, or use `APP_ENV=development` locally. |
+| `PermissionError` on `backend/data` in Docker | The container runs as uid 10001. `chown -R 10001 backend/data`. |
+| Postgres container exits immediately | `POSTGRES_PASSWORD` is not set; there is no default. |
+| `429 Too Many Requests` | A rate limit was hit; wait for `Retry-After` seconds, or raise the `RATE_LIMIT_*` settings. |
+| Signed out after changing the password elsewhere | Expected: a password change revokes every other session. |
+| Adding an RSS feed returns 422 | The URL is not http(s), or points at a private or reserved address. |
+| `/docs` returns 404 | API docs are off in production. Set `API_DOCS_ENABLED=1` to expose them. |
+| Retrieval returns nothing | The library is empty. Import papers from **Discover**, or `POST /api/daily`. |
 | Vector dimension mismatch errors | `EMBED_MODEL` changed. The store detects this and rebuilds; delete `backend/data/faiss.index` if it persists. |
 | Digests never arrive | `SCHEDULER_ENABLED` is off, the channel has no credentials, or delivery falls inside quiet hours. Check `GET /api/health`. |
 | Slash commands missing in Discord | Global sync takes up to an hour. Set `DISCORD_GUILD_ID` for instant per-guild sync. |
