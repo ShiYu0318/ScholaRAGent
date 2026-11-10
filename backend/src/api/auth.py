@@ -3,6 +3,8 @@
 Python 3.13 環境直接用 bcrypt 與 PyJWT（passlib/python-jose 相容性差）。
 JWT_SECRET 未設定時以行程隨機值代替：重啟即失效，只適合本機開發。
 """
+import base64
+import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -19,20 +21,50 @@ _ALGO = "HS256"
 _EPHEMERAL_SECRET = secrets.token_urlsafe(32)
 
 
+MIN_SECRET_LENGTH = 32
+
+
 def _secret():
     return config.JWT_SECRET or _EPHEMERAL_SECRET
 
 
+def check_production_config():
+    """production 啟動前的安全檢查；不合格直接拒絕啟動，而不是帶著弱設定上線。"""
+    if config.APP_ENV != "production":
+        if not config.JWT_SECRET:
+            logger.warning("JWT_SECRET 未設定：使用行程隨機金鑰，重啟後所有登入失效（僅適合本機開發）")
+        return
+    problems = []
+    if len(config.JWT_SECRET) < MIN_SECRET_LENGTH:
+        problems.append(f"JWT_SECRET 必須設定且至少 {MIN_SECRET_LENGTH} 個字元")
+    if "*" in config.CORS_ORIGINS:
+        problems.append("CORS_ORIGINS 不可為 *")
+    if problems:
+        raise RuntimeError("production 設定不安全：" + "；".join(problems))
+
+
 # ---- 密碼 ----
+def _bcrypt_input(password: str) -> bytes:
+    """bcrypt 只吃前 72 bytes（bcrypt 5 起超過會丟例外）。
+
+    超長密碼先做 SHA-256 再 base64（44 bytes），保留完整熵；72 bytes 以內維持
+    原樣，與既有雜湊相容。
+    """
+    raw = password.encode("utf-8")
+    if len(raw) <= 72:
+        return raw
+    return base64.b64encode(hashlib.sha256(raw).digest())
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
+    return bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()).decode("ascii")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     if not password_hash:
         return False
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("ascii"))
+        return bcrypt.checkpw(_bcrypt_input(password), password_hash.encode("ascii"))
     except ValueError:
         return False
 

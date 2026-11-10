@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src import config
+from src.api import auth as auth_lib
 from src.api.ratelimit import RateLimiter
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
@@ -41,6 +42,7 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    auth_lib.check_production_config()
     app = FastAPI(
         title="ScholaRAGent API",
         description="AI 研究副駕：RAG 問答、GraphRAG、深度研究、文獻工具、個人化推送。",

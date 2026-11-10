@@ -69,6 +69,8 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # 選填，提高 GitHub API 額�
 X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN", "")  # X (Twitter) API v2，需付費方案
 
 # --- Web API / 認證 ---
+# development（預設）或 production；production 會強制檢查安全相關設定
+APP_ENV = os.getenv("APP_ENV", "development").strip().lower()
 # JWT_SECRET 未設定時每次啟動隨機產生（重啟後舊 token 失效，僅適合本機開發）
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "10080"))  # 預設 7 天
