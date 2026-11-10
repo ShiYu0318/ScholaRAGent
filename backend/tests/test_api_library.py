@@ -172,3 +172,24 @@ def test_feed_count_is_capped_per_user(api, auth, monkeypatch):
                         headers=auth).status_code == 201
     assert api.post("/api/feeds", json={"url": "https://example.com/x"},
                     headers=auth).status_code == 422
+
+
+def test_reading_note_and_tags_can_be_updated_independently(api, auth):
+    api.post("/api/reading", headers=auth,
+             json={"paper_id": "p1", "title": "T", "tags": ["rag"], "note": "first"})
+    assert api.patch("/api/reading/p1", headers=auth, json={"note": "second"}).status_code == 200
+    item = api.get("/api/reading", headers=auth).json()["items"][0]
+    assert (item["note"], item["tags"], item["state"]) == ("second", ["rag"], "to-read")
+
+    api.patch("/api/reading/p1", headers=auth, json={"tags": ["a", "b"], "state": "done"})
+    item = api.get("/api/reading", headers=auth).json()["items"][0]
+    assert (item["note"], item["tags"], item["state"]) == ("second", ["a", "b"], "done")
+    assert api.patch("/api/reading/nope", headers=auth, json={"note": "x"}).status_code == 404
+    assert api.patch("/api/reading/p1", headers=auth, json={"state": "bogus"}).status_code == 422
+
+
+def test_paper_ids_with_slashes_are_routable(api, auth):
+    api.post("/api/reading", headers=auth, json={"paper_id": "cs/0301001", "title": "Old"})
+    assert api.patch("/api/reading/cs/0301001", headers=auth,
+                     json={"state": "reading"}).status_code == 200
+    assert api.delete("/api/reading/cs/0301001", headers=auth).status_code == 204

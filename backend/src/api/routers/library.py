@@ -27,7 +27,7 @@ def list_papers(limit: int = Query(default=50, ge=1, le=200),
     return get_library_service().papers(limit=limit, source=source, query=query)
 
 
-@router.get("/paper/{paper_id}")
+@router.get("/paper/{paper_id:path}")
 def get_paper(paper_id: str, _user=Depends(get_current_user)):
     paper = get_library_service().paper(paper_id)
     if paper is None:
@@ -77,8 +77,11 @@ class ReadingBody(BaseModel):
     note: str = Field(default="", max_length=5000)
 
 
-class ReadingStateBody(BaseModel):
-    state: ReadingState
+class ReadingUpdateBody(BaseModel):
+    """只更新有給的欄位：閱讀過程中可以單獨補筆記或標籤，不必重送整筆。"""
+    state: ReadingState | None = None
+    tags: list[Tag] | None = Field(default=None, max_length=20)
+    note: str | None = Field(default=None, max_length=5000)
 
 
 @router.get("/reading")
@@ -101,19 +104,16 @@ def reading_add(body: ReadingBody, user=Depends(get_current_user),
         raise HTTPException(status_code=422, detail="無效的閱讀狀態")
 
 
-@router.patch("/reading/{paper_id}")
-def reading_set_state(paper_id: str, body: ReadingStateBody,
-                      user=Depends(get_current_user), store: Store = Depends(get_store)):
-    try:
-        ok = store.reading_set_state(user["id"], paper_id, body.state)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="無效的閱讀狀態")
-    if not ok:
+@router.patch("/reading/{paper_id:path}")
+def reading_update(paper_id: str, body: ReadingUpdateBody,
+                   user=Depends(get_current_user), store: Store = Depends(get_store)):
+    if not store.reading_update(user["id"], paper_id, state=body.state,
+                                tags=body.tags, note=body.note):
         raise HTTPException(status_code=404, detail="閱讀項目不存在")
     return {"ok": True}
 
 
-@router.delete("/reading/{paper_id}", status_code=204)
+@router.delete("/reading/{paper_id:path}", status_code=204)
 def reading_remove(paper_id: str, user=Depends(get_current_user),
                    store: Store = Depends(get_store)):
     if not store.reading_remove(user["id"], paper_id):
