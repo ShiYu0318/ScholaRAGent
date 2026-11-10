@@ -2,13 +2,13 @@
 import io
 import zipfile
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.ratelimit import heavy_limit, limit_user, llm_limit
 from src.api.validators import PaperId, Tag
 from src.api.deps import get_current_user, get_store
 from src.api.services.library import get_library_service
@@ -27,12 +27,52 @@ def list_papers(limit: int = Query(default=50, ge=1, le=200),
     return get_library_service().papers(limit=limit, source=source, query=query)
 
 
-@router.get("/paper/{paper_id}")
+@router.get("/paper/{paper_id:path}")
 def get_paper(paper_id: str, _user=Depends(get_current_user)):
     paper = get_library_service().paper(paper_id)
     if paper is None:
         raise HTTPException(status_code=404, detail="論文不存在")
     return paper
+
+
+# ---- 主動搜尋與匯入 ----
+discover_limit = limit_user("discover", 20, 60)
+
+
+class ImportBody(BaseModel):
+    refs: list[Annotated[str, Field(min_length=1, max_length=300)]] = Field(
+        min_length=1, max_length=25,
+        description="arXiv ID、arXiv 連結或 DOI")
+    project_id: int | None = None
+    add_to_reading: bool = False
+
+
+@router.get("/discover", dependencies=[Depends(discover_limit)])
+def discover(query: str = Query(min_length=2, max_length=200),
+             limit: int = Query(default=10, ge=1, le=25),
+             _user=Depends(get_current_user)):
+    """依主題搜尋外部文獻（arXiv）；結果不會自動入庫。"""
+    return get_library_service().discover(query.strip(), limit=limit)
+
+
+@router.post("/papers/import", dependencies=[Depends(discover_limit)])
+def import_papers(body: ImportBody, user=Depends(get_current_user),
+                  store: Store = Depends(get_store)):
+    """把指定論文匯入文庫，並可同時加入專案與閱讀清單。"""
+    if body.project_id is not None and store.get_project(body.project_id, user["id"]) is None:
+        raise HTTPException(status_code=404, detail="專案不存在")
+    result = get_library_service().import_refs(body.refs)
+    ids = [p["id"] for p in result["imported"]]
+    if body.project_id is not None and ids:
+        store.project_add_papers(body.project_id, user["id"], ids)
+    if body.add_to_reading:
+        existing = {r["id"] for r in store.reading_items(user["id"])}
+        for p in result["imported"]:
+            if p["id"] not in existing:
+                store.reading_upsert(user["id"], p["id"], p["title"])
+    for pid in ids:
+        store.log_interaction("import", paper_id=pid, user_id=user["id"])
+    return result
 
 
 class DailyBody(BaseModel):
@@ -77,8 +117,11 @@ class ReadingBody(BaseModel):
     note: str = Field(default="", max_length=5000)
 
 
-class ReadingStateBody(BaseModel):
-    state: ReadingState
+class ReadingUpdateBody(BaseModel):
+    """只更新有給的欄位：閱讀過程中可以單獨補筆記或標籤，不必重送整筆。"""
+    state: ReadingState | None = None
+    tags: list[Tag] | None = Field(default=None, max_length=20)
+    note: str | None = Field(default=None, max_length=5000)
 
 
 @router.get("/reading")
@@ -101,19 +144,16 @@ def reading_add(body: ReadingBody, user=Depends(get_current_user),
         raise HTTPException(status_code=422, detail="無效的閱讀狀態")
 
 
-@router.patch("/reading/{paper_id}")
-def reading_set_state(paper_id: str, body: ReadingStateBody,
-                      user=Depends(get_current_user), store: Store = Depends(get_store)):
-    try:
-        ok = store.reading_set_state(user["id"], paper_id, body.state)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="無效的閱讀狀態")
-    if not ok:
+@router.patch("/reading/{paper_id:path}")
+def reading_update(paper_id: str, body: ReadingUpdateBody,
+                   user=Depends(get_current_user), store: Store = Depends(get_store)):
+    if not store.reading_update(user["id"], paper_id, state=body.state,
+                                tags=body.tags, note=body.note):
         raise HTTPException(status_code=404, detail="閱讀項目不存在")
     return {"ok": True}
 
 
-@router.delete("/reading/{paper_id}", status_code=204)
+@router.delete("/reading/{paper_id:path}", status_code=204)
 def reading_remove(paper_id: str, user=Depends(get_current_user),
                    store: Store = Depends(get_store)):
     if not store.reading_remove(user["id"], paper_id):

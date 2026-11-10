@@ -19,6 +19,13 @@ class StubArxiv:
     def fetch_latest_papers(self, limit=5):
         return ARXIV_PAPERS[:limit]
 
+    def search_topic(self, topic, limit=8):
+        return [dict(p) for p in ARXIV_PAPERS[:limit]]
+
+    def fetch_by_ids(self, ids):
+        known = {p["id"]: p for p in ARXIV_PAPERS}
+        return [dict(known[i]) for i in ids if i in known]
+
 
 class StubNews:
     def fetch_feed(self, url, timeout=10):
@@ -30,6 +37,13 @@ class StubNews:
 class StubOpenAlex:
     def work_by_arxiv(self, arxiv_id, title=None):
         return {"cited_by_count": 150}
+
+    def paper_by_doi(self, doi):
+        if doi != "10.1000/known":
+            return None
+        return {"id": f"doi:{doi}", "title": "DOI Paper", "abstract": "abs", "authors": "C",
+                "link": "https://doi.org/10.1000/known", "published": "2020-01-01",
+                "source": "doi"}
 
 
 @pytest.fixture
@@ -172,3 +186,78 @@ def test_feed_count_is_capped_per_user(api, auth, monkeypatch):
                         headers=auth).status_code == 201
     assert api.post("/api/feeds", json={"url": "https://example.com/x"},
                     headers=auth).status_code == 422
+
+
+def test_reading_note_and_tags_can_be_updated_independently(api, auth):
+    api.post("/api/reading", headers=auth,
+             json={"paper_id": "p1", "title": "T", "tags": ["rag"], "note": "first"})
+    assert api.patch("/api/reading/p1", headers=auth, json={"note": "second"}).status_code == 200
+    item = api.get("/api/reading", headers=auth).json()["items"][0]
+    assert (item["note"], item["tags"], item["state"]) == ("second", ["rag"], "to-read")
+
+    api.patch("/api/reading/p1", headers=auth, json={"tags": ["a", "b"], "state": "done"})
+    item = api.get("/api/reading", headers=auth).json()["items"][0]
+    assert (item["note"], item["tags"], item["state"]) == ("second", ["a", "b"], "done")
+    assert api.patch("/api/reading/nope", headers=auth, json={"note": "x"}).status_code == 404
+    assert api.patch("/api/reading/p1", headers=auth, json={"state": "bogus"}).status_code == 422
+
+
+def test_paper_ids_with_slashes_are_routable(api, auth):
+    api.post("/api/reading", headers=auth, json={"paper_id": "cs/0301001", "title": "Old"})
+    assert api.patch("/api/reading/cs/0301001", headers=auth,
+                     json={"state": "reading"}).status_code == 200
+    assert api.delete("/api/reading/cs/0301001", headers=auth).status_code == 204
+
+
+def test_discover_marks_papers_already_in_library(api, auth):
+    api.post("/api/papers/import", headers=auth, json={"refs": ["2401.00001"]})
+    items = api.get("/api/discover?query=graph networks", headers=auth).json()["items"]
+    assert {p["id"]: p["in_library"] for p in items} == {"2401.00001": True,
+                                                         "2401.00002": False}
+    # 搜尋本身不入庫
+    assert api.get("/api/papers", headers=auth).json()["total"] == 1
+
+
+def test_import_by_arxiv_id_url_and_doi(api, auth):
+    resp = api.post("/api/papers/import", headers=auth, json={"refs": [
+        "2401.00001", "https://arxiv.org/abs/2401.00002", "10.1000/known",
+        "10.1000/unknown", "not an id", "9999.99999"]}).json()
+    assert [p["id"] for p in resp["imported"]] == ["2401.00001", "2401.00002",
+                                                   "doi:10.1000/known"]
+    assert set(resp["failed"]) == {"10.1000/unknown", "not an id", "9999.99999"}
+    assert api.get("/api/papers", headers=auth).json()["total"] == 3
+    assert api.get("/api/paper/doi:10.1000/known", headers=auth).json()["title"] == "DOI Paper"
+
+
+def test_import_into_project_and_reading_list(api, auth):
+    project = api.post("/api/projects", headers=auth, json={"name": "P"}).json()
+    api.post("/api/papers/import", headers=auth,
+             json={"refs": ["2401.00001"], "project_id": project["id"],
+                   "add_to_reading": True})
+    papers = api.get(f"/api/projects/{project['id']}/papers", headers=auth).json()["items"]
+    assert [p["id"] for p in papers] == ["2401.00001"]
+    assert papers[0]["reading"]["state"] == "to-read"
+    # 再匯入一次不會把已有的閱讀狀態蓋掉
+    api.patch("/api/reading/2401.00001", headers=auth, json={"state": "done"})
+    api.post("/api/papers/import", headers=auth,
+             json={"refs": ["2401.00001"], "add_to_reading": True})
+    assert api.get("/api/reading", headers=auth).json()["items"][0]["state"] == "done"
+
+
+def test_import_into_someone_elses_project_is_rejected(api, auth):
+    other = api.post("/auth/register",
+                     json={"email": "x@b.c", "password": "password123"}).json()["token"]
+    project = api.post("/api/projects", json={"name": "theirs"},
+                       headers={"Authorization": f"Bearer {other}"}).json()
+    resp = api.post("/api/papers/import", headers=auth,
+                    json={"refs": ["2401.00001"], "project_id": project["id"]})
+    assert resp.status_code == 404
+    assert api.get("/api/papers", headers=auth).json()["total"] == 0
+
+
+def test_import_and_discover_validation(api, auth):
+    assert api.post("/api/papers/import", headers=auth, json={"refs": []}).status_code == 422
+    assert api.post("/api/papers/import", headers=auth,
+                    json={"refs": ["1"] * 26}).status_code == 422
+    assert api.get("/api/discover?query=a", headers=auth).status_code == 422
+    assert api.get("/api/discover?query=rag&limit=100", headers=auth).status_code == 422

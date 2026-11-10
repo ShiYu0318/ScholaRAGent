@@ -28,19 +28,52 @@ def _citation_key(paper):
     return f"{surname}{year}{tw}"
 
 
+_BIBTEX_SPECIALS = {"&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_"}
+
+
+def _bibtex_text(value):
+    """跳脫 BibTeX/LaTeX 特殊字元；大括號會破壞欄位結構，直接移除。"""
+    text = str(value or "").replace("{", "").replace("}", "").replace("\\", "")
+    return "".join(_BIBTEX_SPECIALS.get(ch, ch) for ch in text)
+
+
+def _bibtex_authors(authors):
+    """文庫以逗號分隔作者；BibTeX 要用 and，否則整串會被當成一個人。"""
+    names = [a.strip() for a in (authors or "").split(",") if a.strip()]
+    return " and ".join(_bibtex_text(n) for n in names)
+
+
+def _suffix(n):
+    """0 -> ''、1 -> 'a'、2 -> 'b' …（超過 26 個後接數字）。"""
+    if n == 0:
+        return ""
+    return chr(ord("a") + n - 1) if n <= 26 else f"-{n}"
+
+
 def to_bibtex(papers):
-    """把論文清單轉成 BibTeX（arXiv 用 @misc + eprint）。空清單回空字串。"""
-    entries = []
+    """把論文清單轉成 BibTeX。空清單回空字串。
+
+    - citation key 重複時依序加 a/b/c 後綴（重複的 key 會讓 LaTeX 編譯失敗）；
+    - arXiv 論文輸出 eprint + archivePrefix，DOI 論文輸出 doi。
+    """
+    entries, used = [], {}
     for p in papers:
-        key = _citation_key(p)
+        base = _citation_key(p)
+        count = used.get(base, 0)
+        used[base] = count + 1
+        key = base + _suffix(count)
+
+        pid = str(p.get("id", "") or "")
         fields = [
-            ("title", p.get("title", "")),
-            ("author", p.get("authors", "")),
+            ("title", _bibtex_text(p.get("title", ""))),
+            ("author", _bibtex_authors(p.get("authors", ""))),
             ("year", (p.get("published", "") or "")[:4]),
-            ("eprint", p.get("id", "")),
-            ("archivePrefix", "arXiv"),
-            ("url", p.get("link", "")),
         ]
+        if pid.startswith("doi:"):
+            fields.append(("doi", pid[4:]))
+        elif pid and (p.get("source") or "arxiv") == "arxiv":
+            fields += [("eprint", pid), ("archivePrefix", "arXiv")]
+        fields.append(("url", p.get("link", "")))
         body = ",\n".join(f"  {k} = {{{v}}}" for k, v in fields if v)
         entries.append(f"@misc{{{key},\n{body}\n}}")
     return "\n\n".join(entries)

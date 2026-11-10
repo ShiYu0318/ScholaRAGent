@@ -20,13 +20,25 @@ class ArxivCrawler:
     def search_topic(self, topic, limit=8):
         """依主題搜尋最相關的論文（依相關度排序），供主題報告使用。"""
         # 將自然語言主題包成 arxiv 查詢：標題或摘要含關鍵字
+        # 引號會提早結束片語查詢，先移除
+        topic = topic.replace('"', " ").strip()
         query = f'abs:"{topic}" OR ti:"{topic}"'
         return self._search(query, limit, arxiv.SortCriterion.Relevance)
+
+    def fetch_by_ids(self, ids):
+        """依 arXiv id 精確取回論文（匯入指定論文用）。"""
+        ids = [i for i in ids if i]
+        if not ids:
+            return []
+        self.logger.info(f"依 id 取回 arXiv 論文：{ids}")
+        return self._collect(arxiv.Search(id_list=ids, max_results=len(ids)))
 
     def _search(self, query, limit, sort_by):
         """以指定查詢與排序方式抓取論文。"""
         self.logger.info(f"查詢 arXiv: query='{query}' limit={limit} sort={sort_by}")
-        search = arxiv.Search(query=query, max_results=limit, sort_by=sort_by)
+        return self._collect(arxiv.Search(query=query, max_results=limit, sort_by=sort_by))
+
+    def _collect(self, search):
 
         papers = []
         try:
@@ -38,6 +50,7 @@ class ArxivCrawler:
                     "authors": ", ".join(a.name for a in result.authors[:5]),
                     "link": result.entry_id,
                     "published": result.published.strftime("%Y-%m-%d"),
+                    "source": "arxiv",
                 })
         except Exception as e:
             self.logger.error(f"抓取 arXiv 時發生錯誤: {e}", exc_info=True)

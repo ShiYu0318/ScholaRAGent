@@ -38,7 +38,7 @@ def auth(api):
     ("/api/interactions", {"action": "like", "paper_id": "p", "value": 1e9}),
     ("/api/explain", {"paper_id": ""}),
     ("/api/explain", {"nope": 1}),
-    ("/api/compare", {"paper_ids": ["p"] * 21}),
+    ("/api/compare", {"paper_ids": ["p"] * 51}),
     ("/api/memory", {"content": "c", "kind": "Bad Kind!"}),
     ("/api/subscriptions", {"name": "n", "keywords": ["k"] * 21}),
     ("/api/eval", {"engine": "judge", "question": "q", "answer": "a",

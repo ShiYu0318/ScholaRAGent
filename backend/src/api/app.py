@@ -18,6 +18,7 @@ from src.api.ratelimit import RateLimiter
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
 from src.api.routers import conversations as conversations_router
+from src.api.routers import documents as documents_router
 from src.api.routers import extras as extras_router
 from src.api.routers import feeds as feeds_router
 from src.api.routers import graph as graph_router
@@ -26,6 +27,7 @@ from src.api.routers import learning as learning_router
 from src.api.routers import library as library_router
 from src.api.routers import health as health_router
 from src.api.routers import notifications as notifications_router
+from src.api.routers import projects as projects_router
 from src.api.routers import reminders as reminders_router
 from src.api.routers import research as research_router
 from src.api.routers import write as write_router
@@ -82,6 +84,8 @@ def create_app() -> FastAPI:
     app.include_router(research_router.router)
     app.include_router(write_router.router)
     app.include_router(library_router.router)
+    app.include_router(projects_router.router)
+    app.include_router(documents_router.router)
     app.include_router(feeds_router.router)
     app.include_router(insights_router.router)
     app.include_router(notifications_router.router)

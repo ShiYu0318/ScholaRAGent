@@ -43,20 +43,23 @@ class ResearchService:
             self._ask = get_ask_service()
         return self._ask
 
-    def _search(self, topic, k=8):
+    def _search(self, topic, k=8, paper_ids=None):
+        """paper_ids 不為 None 時只用該範圍內的論文（專案文獻或指定論文）。"""
+        if paper_ids is not None:
+            return self.ask.retrieve(topic, k=k, paper_ids=paper_ids)
         if self.store.count_papers() == 0:
             return []
         return self.ask._simple_search(topic, k=k)
 
     # ---- 深度研究（串流事件）----
-    def stream_deepresearch(self, topic, max_subs=4, k=4):
+    def stream_deepresearch(self, topic, max_subs=4, k=4, paper_ids=None):
         """yield 事件 dict：decompose / section / synthesis / citations / done。"""
         subs = self.ask.transformer.decompose(topic, max_sub=max_subs)
         yield {"type": "decompose", "questions": subs}
 
         sections, papers, seen = [], [], set()
         for sub in subs:
-            sub_papers = self._search(sub, k=k)
+            sub_papers = self._search(sub, k=k, paper_ids=paper_ids)
             for p in sub_papers:
                 if p["id"] not in seen:
                     seen.add(p["id"])
@@ -78,8 +81,8 @@ class ResearchService:
         yield {"type": "done"}
 
     # ---- 文獻工具 ----
-    def litreview(self, topic, k=8):
-        papers = self._search(topic, k=k)
+    def litreview(self, topic, k=8, paper_ids=None):
+        papers = self._search(topic, k=k, paper_ids=paper_ids)
         return {"content": literature_review(topic, papers, self.llm),
                 "papers": [p["id"] for p in papers]}
 
@@ -91,8 +94,8 @@ class ResearchService:
         return {"content": comparison_table(topic or "多文件比較", papers, self.llm),
                 "papers": [p["id"] for p in papers]}
 
-    def report(self, topic, k=8):
-        papers = self._search(topic, k=k)
+    def report(self, topic, k=8, paper_ids=None):
+        papers = self._search(topic, k=k, paper_ids=paper_ids)
         return {"content": self.llm.research_report(topic, papers),
                 "papers": [p["id"] for p in papers]}
 
@@ -110,7 +113,7 @@ class ResearchService:
         return {"content": explain_paper(paper, self.llm), "papers": [paper_id]}
 
     # ---- 寫作工具 ----
-    def write(self, tool, text="", topic=""):
+    def write(self, tool, text="", topic="", paper_ids=None):
         """tool: polish | contributions | checklist | latex | slides | review。"""
         if tool == "polish":
             return polish_text(text, self.llm)
@@ -119,10 +122,10 @@ class ResearchService:
         if tool == "checklist":
             return review_checklist(topic or text, self.llm)
         if tool == "latex":
-            papers = self._search(topic, k=5) if topic else []
+            papers = self._search(topic, k=5, paper_ids=paper_ids) if topic else []
             return self.llm.latex_draft(topic or text, papers)
         if tool == "slides":
-            papers = self._search(topic, k=5) if topic else []
+            papers = self._search(topic, k=5, paper_ids=paper_ids) if topic else []
             return self.llm.slides_outline(topic or text, papers)
         if tool == "review":
             return self.llm.review_suggestions(text)

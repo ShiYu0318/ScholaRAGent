@@ -73,8 +73,13 @@ class AskService:
                 return [p for p, _ in self.reranker.rerank(question, cands, k=k)]
             return retriever.search(question, k=k)
 
-    def retrieve(self, question, k=4):
-        """adaptive：none 不檢索、simple 混合檢索、complex 多查詢（+可選精排）。"""
+    def retrieve(self, question, k=4, paper_ids=None):
+        """adaptive：none 不檢索、simple 混合檢索、complex 多查詢（+可選精排）。
+
+        paper_ids 不為 None 時只在該範圍內檢索（專案或指定論文）。
+        """
+        if paper_ids is not None:
+            return self._scoped_search(question, paper_ids, k=k)
         if self.store.count_papers() == 0:
             return []
         level = classify_complexity(question)
@@ -83,6 +88,30 @@ class AskService:
         if level == "complex":
             return self._multi_search(question, k=k)
         return self._simple_search(question, k=k)
+
+    def _scoped_search(self, question, paper_ids, k=4):
+        """限定範圍的檢索：使用者已經挑好文獻，不做複雜度分派，一律檢索。
+
+        先在範圍內做混合檢索；若命中不足 k 篇（例如問題用詞和摘要差很遠），
+        用範圍內其餘論文補滿，確保回答一定建立在使用者指定的文獻上。
+        """
+        allowed = list(dict.fromkeys(paper_ids))
+        if not allowed:
+            return []
+        allowed_set = set(allowed)
+        with self._lock:
+            self.hybrid.index()
+            hits = self.hybrid.retrieve(question, k=k, fetch=max(50, k * 5),
+                                        where=lambda p: p.get("id") in allowed_set)
+        papers = [p for p, _ in hits]
+        if len(papers) < k:
+            seen = {p["id"] for p in papers}
+            for pid in allowed:
+                if len(papers) >= k:
+                    break
+                if pid not in seen and (p := self.store.get_paper(pid)):
+                    papers.append(p)
+        return papers[:k]
 
     @staticmethod
     def citations(papers):
@@ -98,9 +127,16 @@ class AskService:
             for p in papers
         ]
 
-    def stream(self, question, papers):
-        """逐字產生回答。"""
-        yield from self.llm.stream_answer(question, papers)
+    def stream(self, question, papers, history=None):
+        """逐字產生回答；history 為同一對話先前的訊息。"""
+        yield from self.llm.stream_answer(question, papers, history=history)
+
+    @staticmethod
+    def retrieval_query(question, history):
+        """追問常省略主詞（「那它的缺點呢？」），檢索時把上一個問題一起帶入。"""
+        previous = next((m["content"] for m in reversed(history or [])
+                         if m.get("role") == "user"), "")
+        return f"{previous[:300]} {question}".strip() if previous else question
 
 
 _service = None

@@ -64,3 +64,35 @@ def test_explain_paper_includes_title_in_prompt():
     out = explain_paper(_paper(title="Deep Nets"), llm)
     assert out == "EXPLAINED"
     assert "Deep Nets" in llm.seen[0][1]
+
+
+def test_bibtex_keys_are_unique_within_one_export():
+    papers = [{"id": f"240{i}.0000{i}", "title": "Retrieval at scale", "authors": "Ada Lovelace",
+               "published": "2026-01-01"} for i in range(3)]
+    bib = to_bibtex(papers)
+    keys = [line.split("{", 1)[1].rstrip(",") for line in bib.splitlines()
+            if line.startswith("@misc{")]
+    assert keys == ["ada2026retrieval", "ada2026retrievala", "ada2026retrievalb"]
+
+
+def test_bibtex_authors_are_joined_with_and():
+    bib = to_bibtex([{"id": "1", "title": "T", "authors": "Ada Lovelace, Alan Turing, Grace Hopper"}])
+    assert "author = {Ada Lovelace and Alan Turing and Grace Hopper}" in bib
+
+
+def test_bibtex_doi_papers_use_doi_not_arxiv_fields():
+    bib = to_bibtex([{"id": "doi:10.1000/xyz", "title": "T", "authors": "A", "source": "doi",
+                      "link": "https://doi.org/10.1000/xyz"}])
+    assert "doi = {10.1000/xyz}" in bib
+    assert "archivePrefix" not in bib and "eprint" not in bib
+
+
+def test_bibtex_non_arxiv_sources_have_no_eprint():
+    bib = to_bibtex([{"id": "news-abc", "title": "T", "source": "rss", "link": "https://e.com"}])
+    assert "eprint" not in bib and "url = {https://e.com}" in bib
+
+
+def test_bibtex_escapes_special_characters():
+    bib = to_bibtex([{"id": "1", "title": "50% better: Q&A {with} braces_", "authors": "A"}])
+    assert r"title = {50\% better: Q\&A with braces\_}" in bib
+    assert bib.count("{") == bib.count("}")

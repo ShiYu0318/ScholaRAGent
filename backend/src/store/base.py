@@ -10,8 +10,10 @@ Discord bot 等舊入口仍可直接使用底層類別，不受影響。
 """
 from abc import ABC, abstractmethod
 
+from src.store.workspace import WorkspaceMixin
 
-class Store(ABC):
+
+class Store(WorkspaceMixin, ABC):
     # ---- 使用者 ----
     @abstractmethod
     def create_user(self, email, password_hash=None, display_name=None,
@@ -115,11 +117,11 @@ class Store(ABC):
 
     # ---- 對話 ----
     @abstractmethod
-    def create_conversation(self, user_id, title=""):
+    def create_conversation(self, user_id, title="", project_id=None):
         """建立對話，回傳 conversation dict。"""
 
     @abstractmethod
-    def list_conversations(self, user_id, query=None, limit=50):
+    def list_conversations(self, user_id, query=None, limit=50, project_id=None):
         """列出/搜尋對話（依更新時間新到舊）。query 比對標題與訊息內容。"""
 
     @abstractmethod

@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from src.api.ratelimit import heavy_limit, llm_limit
 from src.api.deps import get_current_user, get_store
 from src.api.services.ask import get_ask_service
+from src.api.validators import PaperId
 from src.store.base import Store
 from src.utils.logger import get_logger
 
@@ -20,6 +21,9 @@ class AskBody(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     conversation_id: int | None = None
     k: int = Field(default=4, ge=1, le=20)
+    # 檢索範圍：專案內的文獻，或明確指定的論文；都沒給就搜尋整個文庫
+    project_id: int | None = None
+    paper_ids: list[PaperId] | None = Field(default=None, max_length=50)
 
 
 def sse(payload):
@@ -38,14 +42,31 @@ def ask(body: AskBody, user=Depends(get_current_user), store: Store = Depends(ge
         conv = store.get_conversation(body.conversation_id, user_id=user["id"])
         if conv is None:
             raise HTTPException(status_code=404, detail="對話不存在")
+
+    # 接續既有對話時沿用它所屬的專案，使用者不必每次重選範圍
+    project_id = body.project_id
+    if project_id is None and conv is not None and body.paper_ids is None:
+        project_id = conv.get("project_id")
+    scope = body.paper_ids
+    if project_id is not None:
+        project_papers = store.project_paper_ids(project_id, user["id"])
+        if project_papers is None:
+            raise HTTPException(status_code=404, detail="專案不存在")
+        if scope is None:
+            scope = project_papers
+
+    history = [{"role": m["role"], "content": m["content"]}
+               for m in (conv["messages"] if conv else [])]
     if conv is None:
-        conv = store.create_conversation(user["id"], title=question[:80])
+        conv = store.create_conversation(user["id"], title=question[:80],
+                                         project_id=project_id)
     store.add_message(conv["id"], "user", question)
 
     def gen():
         yield sse({"type": "conversation", "conversation_id": conv["id"]})
         try:
-            papers = service.retrieve(question, k=body.k)
+            papers = service.retrieve(service.retrieval_query(question, history),
+                                      k=body.k, paper_ids=scope)
         except Exception:
             # 例外內容可能含路徑、連線字串或上游回應：只記在伺服器端
             logger.exception("檢索失敗")
@@ -54,7 +75,7 @@ def ask(body: AskBody, user=Depends(get_current_user), store: Store = Depends(ge
 
         parts = []
         try:
-            for delta in service.stream(question, papers):
+            for delta in service.stream(question, papers, history=history):
                 parts.append(delta)
                 yield sse({"type": "token", "text": delta})
         except Exception:

@@ -25,6 +25,17 @@ def _strip_oa(ref):
     return ref[len(_OA_PREFIX):] if ref.startswith(_OA_PREFIX) else ref
 
 
+def _abstract_from_index(index):
+    """OpenAlex 以倒排索引（詞 -> 位置清單）提供摘要，這裡還原成文字。"""
+    if not isinstance(index, dict):
+        return ""
+    words = {}
+    for word, positions in index.items():
+        for pos in positions or []:
+            words[pos] = word
+    return " ".join(words[i] for i in sorted(words))
+
+
 class OpenAlexClient:
     BASE = "https://api.openalex.org"
 
@@ -67,6 +78,35 @@ class OpenAlexClient:
         if work is None and title:
             return self.work_by_title(title)
         return work
+
+    _PAPER_SELECT = ("id,doi,title,abstract_inverted_index,authorships,"
+                     "publication_date,primary_location")
+
+    def paper_by_doi(self, doi):
+        """以 DOI 取回一篇論文並轉成文庫的 paper 格式；查不到回 None。"""
+        from urllib.parse import quote
+        url = f"{self.BASE}/works/doi:{quote(doi, safe='/')}?select={self._PAPER_SELECT}"
+        if self.mailto:
+            url += f"&mailto={self.mailto}"
+        try:
+            data = self._fetch(url)
+        except Exception as e:
+            self.logger.info(f"OpenAlex DOI 查詢未果（{doi}）：{e}")
+            return None
+        if not data or not data.get("title"):
+            return None
+        location = data.get("primary_location") or {}
+        authors = [(a.get("author") or {}).get("display_name", "")
+                   for a in (data.get("authorships") or [])[:5]]
+        return {
+            "id": f"doi:{doi.lower()}",
+            "title": data["title"].strip(),
+            "abstract": _abstract_from_index(data.get("abstract_inverted_index")),
+            "authors": ", ".join(a for a in authors if a),
+            "link": location.get("landing_page_url") or f"https://doi.org/{doi}",
+            "published": data.get("publication_date") or "",
+            "source": "doi",
+        }
 
     def work_by_title(self, title):
         """以標題搜尋 work（搜尋端點；匿名可能被限流，失敗回 None）。"""

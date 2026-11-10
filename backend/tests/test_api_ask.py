@@ -19,12 +19,20 @@ PAPERS = [
 class StubAskService:
     """不打網路：固定檢索結果 + 兩段式串流。"""
 
-    def retrieve(self, question, k=4):
+    def __init__(self):
+        self.calls = []
+
+    def retrieve(self, question, k=4, paper_ids=None):
+        self.calls.append({"query": question, "paper_ids": paper_ids})
+        if paper_ids is not None:
+            return [p for p in PAPERS if p["id"] in paper_ids]
         return PAPERS
 
     citations = staticmethod(ask_module.AskService.citations)
+    retrieval_query = staticmethod(ask_module.AskService.retrieval_query)
 
-    def stream(self, question, papers):
+    def stream(self, question, papers, history=None):
+        self.calls[-1]["history"] = history
         yield "答案"
         yield "第二段"
 
@@ -137,7 +145,7 @@ def test_share_and_public_read(api, auth):
 
 def test_stream_errors_do_not_leak_exception_details(api, auth):
     class Boom(StubAskService):
-        def retrieve(self, question, k=4):
+        def retrieve(self, question, k=4, paper_ids=None):
             raise RuntimeError("postgresql://air:s3cret@db:5432 connection refused")
 
     prev = ask_module.set_ask_service(Boom())
@@ -151,7 +159,7 @@ def test_stream_errors_do_not_leak_exception_details(api, auth):
 
 def test_generation_errors_do_not_leak_exception_details(api, auth):
     class Boom(StubAskService):
-        def stream(self, question, papers):
+        def stream(self, question, papers, history=None):
             yield "部分"
             raise RuntimeError("Authorization: Bearer gsk_live_secret")
 
@@ -187,3 +195,66 @@ def test_cannot_revoke_someone_elses_share(api, auth):
                       headers={"Authorization": f"Bearer {other}"})
     assert resp.status_code == 404
     assert api.get(f"/api/shared/{token}").status_code == 200
+
+
+# ---- 檢索範圍與對話脈絡 ----
+def _service():
+    return ask_module.get_ask_service()
+
+
+def test_ask_scoped_to_explicit_papers(api, auth):
+    resp = api.post("/api/ask", headers=auth, json={"question": "q", "paper_ids": ["p2"]})
+    assert _service().calls[-1]["paper_ids"] == ["p2"]
+    assert '"id": "p2"' in resp.text and '"id": "p1"' not in resp.text
+
+
+def test_ask_scoped_to_project_and_followups_keep_the_scope(api, auth):
+    project = api.post("/api/projects", headers=auth, json={"name": "P"}).json()
+    api.post(f"/api/projects/{project['id']}/papers", headers=auth, json={"paper_ids": ["p1"]})
+    api.post("/api/ask", headers=auth, json={"question": "第一題", "project_id": project["id"]})
+    assert _service().calls[-1]["paper_ids"] == ["p1"]
+
+    convs = api.get(f"/api/conversations?project_id={project['id']}", headers=auth).json()
+    conv_id = convs["items"][0]["id"]
+    # 追問不帶 project_id：沿用對話所屬專案
+    api.post("/api/ask", headers=auth, json={"question": "那缺點呢", "conversation_id": conv_id})
+    call = _service().calls[-1]
+    assert call["paper_ids"] == ["p1"]
+    assert call["query"] == "第一題 那缺點呢"
+    assert [m["role"] for m in call["history"]] == ["user", "assistant"]
+    assert api.get(f"/api/projects/{project['id']}", headers=auth).json()[
+        "conversation_count"] == 1
+
+
+def test_first_question_has_no_history_and_searches_whole_library(api, auth):
+    api.post("/api/ask", headers=auth, json={"question": "what?"})
+    call = _service().calls[-1]
+    assert call["paper_ids"] is None and call["history"] == [] and call["query"] == "what?"
+
+
+def test_ask_in_someone_elses_project_is_404(api, auth):
+    other = api.post("/auth/register",
+                     json={"email": "z@b.c", "password": "password123"}).json()["token"]
+    project = api.post("/api/projects", json={"name": "theirs"},
+                       headers={"Authorization": f"Bearer {other}"}).json()
+    resp = api.post("/api/ask", headers=auth,
+                    json={"question": "q", "project_id": project["id"]})
+    assert resp.status_code == 404
+    assert api.get("/api/conversations", headers=auth).json()["items"] == []
+
+
+def test_scoped_search_only_returns_papers_in_scope(tmp_path, fake_embedder):
+    store = SqliteFaissStore(db_path=tmp_path / "s.db", embedder=fake_embedder)
+    papers = [{"id": f"s{i}", "title": f"graph retrieval {i}", "abstract": "graph retrieval",
+               "link": f"https://e.com/{i}"} for i in range(6)]
+    papers.append({"id": "far", "title": "protein folding", "abstract": "biology",
+                   "link": "https://e.com/far"})
+    store.upsert_papers(papers)
+    store.index_papers(papers)
+    service = ask_module.AskService(store)
+    hits = service.retrieve("graph retrieval", k=3, paper_ids=["s1", "far"])
+    assert {p["id"] for p in hits} == {"s1", "far"}      # 不足 k 篇時以範圍內論文補滿
+    assert service.retrieve("graph retrieval", k=3, paper_ids=[]) == []
+    assert len(service.retrieve("graph retrieval", k=2,
+                                paper_ids=["s0", "s1", "s2", "s3"])) == 2
+    store.close()

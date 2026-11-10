@@ -16,9 +16,11 @@ class RenameBody(BaseModel):
 @router.get("/conversations")
 def list_conversations(query: str | None = Query(default=None, max_length=200),
                        limit: int = Query(default=50, ge=1, le=200),
+                       project_id: int | None = None,
                        user=Depends(get_current_user),
                        store: Store = Depends(get_store)):
-    items = store.list_conversations(user["id"], query=query, limit=limit)
+    items = store.list_conversations(user["id"], query=query, limit=limit,
+                                     project_id=project_id)
     return {"items": items}
 
 

@@ -6,6 +6,7 @@ RSS feeds 刷新、匯出（Obsidian/CSV/BibTeX）。
 """
 import csv
 import io
+import re
 import threading
 
 from src import config
@@ -17,10 +18,12 @@ from src.recommend.personalize import personalize_daily
 from src.recommend.ranker import rank_papers
 from src.recommend.reproducibility import reproducibility_signal
 from src.tools.obsidian_export import to_obsidian
+from src.tools.paper_refs import parse_reference
 from src.tools.research_tools import to_bibtex
 from src.utils.logger import get_logger
 from src.utils.text_safety import csv_safe
 
+_VERSION = re.compile(r"v\d+$")
 CSV_FIELDS = ("id", "title", "authors", "published", "link", "source", "summary")
 
 
@@ -76,6 +79,50 @@ class LibraryService:
             self.logger.info(f"credibility 查詢失敗：{e}")
             p["credibility"] = None
         return p
+
+    # ---- 主動搜尋與匯入 ----
+    def discover(self, query, limit=10):
+        """依主題搜尋 arXiv，並標示哪些結果已在文庫中。結果不入庫。"""
+        results = self.arxiv.search_topic(query, limit=limit)
+        for p in results:
+            p["in_library"] = self.store.get_paper(p["id"]) is not None
+        return {"items": results}
+
+    def import_refs(self, refs):
+        """依識別碼（arXiv ID / 連結 / DOI）匯入論文。
+
+        內容一律由伺服器向 arXiv / OpenAlex 取回，不接受用戶端自帶的標題或摘要：
+        文庫是所有使用者共用的，不能讓人任意寫入內容。
+        """
+        arxiv_ids, dois, failed = [], [], []
+        for ref in refs:
+            parsed = parse_reference(ref)
+            if parsed is None:
+                failed.append(ref)
+            elif parsed[0] == "arxiv":
+                arxiv_ids.append((ref, parsed[1]))
+            else:
+                dois.append((ref, parsed[1]))
+
+        papers = []
+        if arxiv_ids:
+            fetched = self.arxiv.fetch_by_ids([i for _, i in arxiv_ids])
+            # arXiv 回傳的 id 帶版本號（2401.00001v2），以去版本後的 id 對回請求
+            found = {_VERSION.sub("", p["id"]) for p in fetched}
+            failed += [ref for ref, i in arxiv_ids if _VERSION.sub("", i) not in found]
+            papers += fetched
+        for ref, doi in dois:
+            paper = self.openalex.paper_by_doi(doi)
+            if paper:
+                papers.append(paper)
+            else:
+                failed.append(ref)
+
+        if papers:
+            self.store.upsert_papers(papers)
+            self.store.index_papers(papers)
+        self.logger.info(f"匯入論文：成功 {len(papers)}，失敗 {len(failed)}")
+        return {"imported": papers, "failed": failed}
 
     # ---- 每日抓取 ----
     def daily(self, count=None):

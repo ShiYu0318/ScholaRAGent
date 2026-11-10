@@ -12,7 +12,7 @@ from src.store.sqlite_faiss import SqliteFaissStore
 _PG_URL = os.getenv("TEST_DATABASE_URL", "")
 
 # 依外鍵順序 TRUNCATE，保每測試隔離
-_PG_TABLES = ("paper_embeddings", "interactions", "messages", "conversations",
+_PG_TABLES = ("project_papers", "documents", "projects", "paper_embeddings", "interactions", "messages", "conversations",
               "reading_list", "notification_preferences", "reminders",
               "learning_paths", "user_skills", "feeds", "user_subscriptions",
               "papers", "users")
@@ -190,3 +190,103 @@ def test_stats(store):
     s = store.stats()
     assert s["users"] == 1 and s["papers"] == 1
     assert s["backend"] in ("sqlite_faiss", "postgres_pgvector")
+
+
+# ---- 研究工作區：專案 / 專案文獻 / 文件 ----
+def _papers(store, *ids):
+    store.upsert_papers([{"id": i, "title": f"Paper {i}", "abstract": "a",
+                          "link": f"https://arxiv.org/abs/{i}"} for i in ids])
+
+
+def test_project_crud_and_ownership(store):
+    alice = store.create_user("alice@x.io")
+    bob = store.create_user("bob@x.io")
+    p = store.create_project(alice["id"], "RAG survey", question="How to evaluate RAG?")
+    assert p["status"] == "active" and p["paper_count"] == 0
+    assert store.get_project(p["id"], bob["id"]) is None
+    assert store.update_project(p["id"], bob["id"], name="hijack") is None
+    assert store.delete_project(p["id"], bob["id"]) is False
+
+    updated = store.update_project(p["id"], alice["id"], name="RAG eval", status="archived")
+    assert updated["name"] == "RAG eval" and updated["status"] == "archived"
+    assert store.list_projects(alice["id"]) == []
+    assert len(store.list_projects(alice["id"], include_archived=True)) == 1
+    with pytest.raises(ValueError):
+        store.update_project(p["id"], alice["id"], status="bogus")
+    assert store.delete_project(p["id"], alice["id"]) is True
+    assert store.get_project(p["id"], alice["id"]) is None
+
+
+def test_project_papers_membership(store):
+    u = store.create_user("u@x.io")
+    other = store.create_user("o@x.io")
+    _papers(store, "a1", "a2", "a3")
+    p = store.create_project(u["id"], "P")
+    assert store.project_add_papers(p["id"], u["id"], ["a1", "a2", "a1", "missing"]) == 2
+    assert store.project_add_papers(p["id"], u["id"], ["a2", "a3"]) == 1   # 冪等
+    assert set(store.project_paper_ids(p["id"], u["id"])) == {"a1", "a2", "a3"}
+    assert {x["id"] for x in store.project_papers(p["id"], u["id"])} == {"a1", "a2", "a3"}
+    assert store.get_project(p["id"], u["id"])["paper_count"] == 3
+
+    assert store.project_add_papers(p["id"], other["id"], ["a1"]) is None
+    assert store.project_paper_ids(p["id"], other["id"]) is None
+    assert store.project_remove_paper(p["id"], other["id"], "a1") is False
+    assert store.project_remove_paper(p["id"], u["id"], "a1") is True
+    assert store.project_remove_paper(p["id"], u["id"], "a1") is False
+
+
+def test_documents_crud_and_scoping(store):
+    u = store.create_user("u@x.io")
+    other = store.create_user("o@x.io")
+    p = store.create_project(u["id"], "P")
+    doc = store.create_document(u["id"], "Related work", content="# Draft " + "x" * 400,
+                                kind="review", project_id=p["id"], paper_ids=["a1"])
+    assert doc["paper_ids"] == ["a1"] and doc["kind"] == "review"
+    assert store.get_document(doc["id"], other["id"]) is None
+    assert store.update_document(doc["id"], other["id"], title="x") is None
+    assert store.delete_document(doc["id"], other["id"]) is False
+
+    listed = store.list_documents(u["id"], project_id=p["id"])
+    assert len(listed) == 1 and "content" not in listed[0] and len(listed[0]["excerpt"]) == 200
+    assert store.list_documents(other["id"]) == []
+
+    upd = store.update_document(doc["id"], u["id"], content="new", paper_ids=["a1", "a2"])
+    assert upd["content"] == "new" and upd["paper_ids"] == ["a1", "a2"]
+    moved = store.update_document(doc["id"], u["id"], project_id=None)
+    assert moved["project_id"] is None
+
+    with pytest.raises(ValueError):
+        store.create_document(u["id"], "t", kind="bogus")
+    with pytest.raises(ValueError):                       # 不能掛到別人的專案
+        store.create_document(other["id"], "t", project_id=p["id"])
+    assert store.delete_document(doc["id"], u["id"]) is True
+
+
+def test_deleting_project_keeps_documents_and_conversations(store):
+    u = store.create_user("u@x.io")
+    _papers(store, "a1")
+    p = store.create_project(u["id"], "P")
+    store.project_add_papers(p["id"], u["id"], ["a1"])
+    doc = store.create_document(u["id"], "D", project_id=p["id"])
+    conv = store.create_conversation(u["id"], title="C", project_id=p["id"])
+    assert store.get_project(p["id"], u["id"])["conversation_count"] == 1
+    assert [c["id"] for c in store.list_conversations(u["id"], project_id=p["id"])] == [conv["id"]]
+
+    store.delete_project(p["id"], u["id"])
+    assert store.get_document(doc["id"], u["id"])["project_id"] is None
+    assert store.get_conversation(conv["id"], user_id=u["id"])["project_id"] is None
+    assert store.get_paper("a1") is not None
+
+
+def test_reading_partial_update(store):
+    u = store.create_user("u@x.io")
+    store.reading_upsert(u["id"], "a1", "T", tags=["rag"], note="first")
+    assert store.reading_update(u["id"], "a1", note="second") is True
+    item = store.reading_items(u["id"])[0]
+    assert item["note"] == "second" and item["tags"] == ["rag"] and item["state"] == "to-read"
+    assert store.reading_update(u["id"], "a1", state="done", tags=["x", "y"]) is True
+    item = store.reading_items(u["id"])[0]
+    assert item["state"] == "done" and item["tags"] == ["x", "y"] and item["note"] == "second"
+    assert store.reading_update(u["id"], "nope", note="n") is False
+    with pytest.raises(ValueError):
+        store.reading_update(u["id"], "a1", state="bogus")
