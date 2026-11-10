@@ -1,36 +1,15 @@
-// 設定頁：帳號資料、外觀語言、連結帳號（Discord 綁定）、通知偏好與排程、
-// 提醒管理、系統/金鑰狀態。
-import {
-  Box,
-  Button,
-  Checkbox,
-  Flash,
-  Heading,
-  IconButton,
-  Label,
-  SegmentedControl,
-  Select,
-  Text,
-  TextInput,
-} from "@primer/react";
-import {
-  BellIcon,
-  CheckIcon,
-  ClockIcon,
-  LinkIcon,
-  PaintbrushIcon,
-  PersonIcon,
-  ServerIcon,
-  TrashIcon,
-} from "@primer/octicons-react";
+// 設定：帳號與安全、外觀、通知、提醒、系統狀態。一欄到底，每區一個主題。
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { Check, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { api, type User } from "../lib/api";
+import { setLocale } from "../i18n";
+import { api, setToken, type User } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { useThemeMode } from "../theme";
-import { Card, CardState } from "../components/Card";
+import { useTheme } from "../lib/theme";
+import { Badge, Button, Field, IconButton, Input, Notice, PageHead, Segmented, Select, Switch } from "../ui";
+import { useToast } from "../ui/toast";
 
 interface Preferences {
   frequency: "daily" | "weekly" | "off";
@@ -53,416 +32,281 @@ interface Reminder {
 
 interface HealthInfo {
   status: string;
-  store_backend: string;
-  scheduler: { running: boolean; jobs: { id: string; next_run: string | null }[] };
-  providers: Record<string, boolean>;
+  store_backend?: string;
+  scheduler?: { running: boolean };
+  providers?: Record<string, boolean>;
 }
 
 const CHANNELS = ["web", "telegram", "email", "line"] as const;
 
+function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section style={{ display: "grid", gridTemplateColumns: "220px minmax(0, 1fr)", gap: 32, padding: "28px 0", borderTop: "1px solid var(--rule)" }}
+             className="settings-section">
+      <div>
+        <h3 style={{ fontSize: 16 }}>{title}</h3>
+        {hint && <p className="t-meta" style={{ marginTop: 4 }}>{hint}</p>}
+      </div>
+      <div className="stack" style={{ maxWidth: 520 }}>{children}</div>
+    </section>
+  );
+}
+
 export function Settings() {
   const { t, i18n } = useTranslation();
-  const { user, refresh } = useAuth();
-  const { mode, toggle } = useThemeMode();
+  const toast = useToast();
   const queryClient = useQueryClient();
+  const { user, refresh, logout } = useAuth();
+  const { mode, setMode } = useTheme();
 
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
-  const [saved, setSaved] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [prefs, setPrefs] = useState<Preferences | null>(null);
   const [reminderText, setReminderText] = useState("");
   const [reminderDue, setReminderDue] = useState("");
 
-  const prefsQuery = useQuery({
-    queryKey: ["notification-prefs"],
-    queryFn: () => api<Preferences>("/api/notifications/preferences"),
-  });
-  useEffect(() => {
-    if (prefsQuery.data) setPrefs(prefsQuery.data);
-  }, [prefsQuery.data]);
+  const prefsQuery = useQuery({ queryKey: ["prefs"], queryFn: () => api<Preferences>("/api/notifications/preferences") });
+  useEffect(() => { if (prefsQuery.data) setPrefs(prefsQuery.data); }, [prefsQuery.data]);
+  const reminders = useQuery({ queryKey: ["reminders"], queryFn: () => api<{ items: Reminder[] }>("/api/reminders") });
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api<HealthInfo>("/api/health") });
+  const providers = useQuery({ queryKey: ["auth", "providers"], queryFn: () => api<Record<string, boolean>>("/auth/providers") });
 
-  const reminders = useQuery({
-    queryKey: ["reminders"],
-    queryFn: () => api<{ items: Reminder[] }>("/api/reminders"),
-  });
-  const health = useQuery({
-    queryKey: ["health", "full"],
-    queryFn: () => api<HealthInfo>("/api/health"),
+  const saveProfile = useMutation({
+    mutationFn: () => api<User>("/auth/me", { method: "PATCH", body: { display_name: displayName.trim() } }),
+    onSuccess: async () => { await refresh(); toast.show(t("settings.saved")); },
+    onError: toast.error,
   });
 
-  const flash = (msg: string) => {
-    setSaved(msg);
-    setTimeout(() => setSaved(null), 2500);
-  };
-
-  const saveAccount = useMutation({
-    mutationFn: (body: Partial<User>) =>
-      api<User>("/auth/me", { method: "PATCH", body }),
-    onSuccess: async (updated) => {
+  // 改密碼後舊 token 全部失效，後端會回一個新 token 讓這個裝置維持登入
+  const changePassword = useMutation({
+    mutationFn: () =>
+      api<User & { token?: string }>("/auth/me", {
+        method: "PATCH",
+        body: { password: newPassword, current_password: currentPassword || undefined },
+      }),
+    onSuccess: async (data) => {
+      if (data.token) setToken(data.token);
+      setCurrentPassword("");
+      setNewPassword("");
       await refresh();
-      if (updated.locale && updated.locale !== i18n.language) {
-        i18n.changeLanguage(updated.locale);
-        localStorage.setItem("scholaragent.locale", updated.locale);
-      }
-      flash(t("settings.saved"));
+      toast.show(t("settings.passwordChanged"));
     },
+    onError: toast.error,
+  });
+  const logoutAll = useMutation({
+    mutationFn: () => api("/auth/logout-all", { method: "POST" }),
+    onSuccess: logout,
+    onError: toast.error,
   });
 
   const savePrefs = useMutation({
-    mutationFn: (body: Preferences) =>
-      api<Preferences>("/api/notifications/preferences", { method: "PUT", body }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notification-prefs"] });
-      flash(t("settings.saved"));
-    },
+    mutationFn: (body: Preferences) => api<Preferences>("/api/notifications/preferences", { method: "PUT", body }),
+    onSuccess: () => toast.show(t("settings.saved")),
+    onError: toast.error,
   });
-
+  const refreshReminders = () => void queryClient.invalidateQueries({ queryKey: ["reminders"] });
   const addReminder = useMutation({
-    mutationFn: () =>
-      api<Reminder>("/api/reminders", {
-        method: "POST",
-        body: { text: reminderText.trim(), due_at: reminderDue },
-      }),
-    onSuccess: () => {
-      setReminderText("");
-      setReminderDue("");
-      queryClient.invalidateQueries({ queryKey: ["reminders"] });
-    },
+    mutationFn: () => api<Reminder>("/api/reminders", { method: "POST", body: { text: reminderText.trim(), due_at: reminderDue } }),
+    onSuccess: () => { setReminderText(""); setReminderDue(""); refreshReminders(); },
+    onError: toast.error,
   });
-
   const completeReminder = useMutation({
-    mutationFn: (id: number) =>
-      api<{ ok: boolean }>(`/api/reminders/${id}/complete`, { method: "POST" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reminders"] }),
+    mutationFn: (id: number) => api(`/api/reminders/${id}/complete`, { method: "POST" }),
+    onSuccess: refreshReminders, onError: toast.error,
   });
-
   const deleteReminder = useMutation({
     mutationFn: (id: number) => api<void>(`/api/reminders/${id}`, { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reminders"] }),
+    onSuccess: refreshReminders, onError: toast.error,
   });
-
   const linkDiscord = useMutation({
     mutationFn: () => api<{ url: string }>("/auth/discord/link", { method: "POST" }),
-    onSuccess: (data) => {
-      window.location.href = data.url;
-    },
+    onSuccess: (d) => { window.location.href = d.url; },
+    onError: toast.error,
   });
-
   const unlinkDiscord = useMutation({
     mutationFn: () => api<void>("/auth/discord/link", { method: "DELETE" }),
-    onSuccess: () => refresh(),
+    onSuccess: () => void refresh(),
+    onError: toast.error,
   });
 
-  const setChannel = (channel: string, on: boolean) => {
+  const submitPassword = (e: FormEvent) => { e.preventDefault(); if (newPassword.length >= 8) changePassword.mutate(); };
+  const submitReminder = (e: FormEvent) => { e.preventDefault(); if (reminderText.trim() && reminderDue) addReminder.mutate(); };
+  const toggleChannel = (channel: string, on: boolean) => {
     if (!prefs) return;
-    const channels = on
-      ? [...new Set([...prefs.channels, channel])]
-      : prefs.channels.filter((c) => c !== channel);
-    setPrefs({ ...prefs, channels });
+    setPrefs({ ...prefs, channels: on ? [...new Set([...prefs.channels, channel])] : prefs.channels.filter((c) => c !== channel) });
   };
 
   return (
-    <Box>
-      <Heading as="h2" sx={{ fontSize: 3, mb: 3 }}>
-        {t("nav.settings")}
-      </Heading>
-      {saved && (
-        <Flash variant="success" sx={{ mb: 3 }}>
-          {saved}
-        </Flash>
-      )}
+    <div className="page-narrow" style={{ margin: "0 auto", maxWidth: 820 }}>
+      <PageHead title={t("nav.settings")} />
 
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-          gap: 3,
-          alignItems: "start",
-        }}
-      >
-        <Card title={t("settings.account")} icon={PersonIcon}>
-          <Box sx={{ display: "grid", gap: 3 }}>
-            <Box>
-              <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                Email
-              </Text>
-              <Text sx={{ fontSize: 1, fontFamily: "mono" }}>{user?.email}</Text>
-            </Box>
-            <Box>
-              <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                {t("auth.displayName")}
-              </Text>
-              <TextInput
-                block
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </Box>
-            <Box>
-              <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                {t("common.language")}
-              </Text>
-              <Select
-                block
-                value={user?.locale || i18n.language}
-                onChange={(e) =>
-                  saveAccount.mutate({ locale: e.target.value })
-                }
-              >
-                <Select.Option value="en">English</Select.Option>
-                <Select.Option value="zh">繁體中文</Select.Option>
-              </Select>
-            </Box>
-            <Button
-              variant="primary"
-              disabled={saveAccount.isPending}
-              onClick={() => saveAccount.mutate({ display_name: displayName })}
-            >
-              {t("common.save")}
+      <Section title={t("settings.profile")} hint={user?.email}>
+        <form className="row" style={{ alignItems: "flex-end" }} onSubmit={(e) => { e.preventDefault(); saveProfile.mutate(); }}>
+          <div className="grow">
+            <Field label={t("settings.displayName")}>
+              {(id) => <Input id={id} value={displayName} maxLength={80} onChange={(e) => setDisplayName(e.target.value)} />}
+            </Field>
+          </div>
+          <Button type="submit" loading={saveProfile.isPending} disabled={!displayName.trim() || displayName === user?.display_name}>
+            {t("common.save")}
+          </Button>
+        </form>
+      </Section>
+
+      <Section title={t("settings.security")} hint={t("settings.securityHint")}>
+        <form className="stack" onSubmit={submitPassword}>
+          {user?.has_password && (
+            <Field label={t("settings.currentPassword")}>
+              {(id) => <Input id={id} type="password" autoComplete="current-password" value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)} />}
+            </Field>
+          )}
+          <Field label={user?.has_password ? t("settings.newPassword") : t("settings.setPassword")} hint={t("settings.passwordHint")}>
+            {(id) => <Input id={id} type="password" autoComplete="new-password" minLength={8} maxLength={128}
+                            value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />}
+          </Field>
+          <div>
+            <Button type="submit" loading={changePassword.isPending}
+                    disabled={newPassword.length < 8 || (!!user?.has_password && !currentPassword)}>
+              {t("settings.changePassword")}
             </Button>
-          </Box>
-        </Card>
+          </div>
+        </form>
+        <div className="spread" style={{ paddingTop: 16, borderTop: "1px solid var(--rule-soft)" }}>
+          <div>
+            <div className="t-strong">{t("settings.logoutAll")}</div>
+            <div className="t-meta">{t("settings.logoutAllHint")}</div>
+          </div>
+          <Button variant="danger" loading={logoutAll.isPending} onClick={() => logoutAll.mutate()}>{t("settings.logoutAllAction")}</Button>
+        </div>
+      </Section>
 
-        <Card title={t("settings.appearance")} icon={PaintbrushIcon}>
-          <Box sx={{ display: "grid", gap: 2 }}>
-            <Text sx={{ fontSize: 0, color: "fg.muted" }}>{t("common.theme")}</Text>
-            <SegmentedControl aria-label={t("common.theme")}>
-              <SegmentedControl.Button
-                selected={mode === "night"}
-                onClick={() => mode !== "night" && toggle()}
-              >
-                {t("common.themeNight")}
-              </SegmentedControl.Button>
-              <SegmentedControl.Button
-                selected={mode === "day"}
-                onClick={() => mode !== "day" && toggle()}
-              >
-                {t("common.themeDay")}
-              </SegmentedControl.Button>
-            </SegmentedControl>
-          </Box>
-        </Card>
+      <Section title={t("settings.linked")} hint={t("settings.linkedHint")}>
+        {(["google", "github"] as const).map((p) => (
+          <div key={p} className="spread">
+            <span className="t-strong" style={{ textTransform: "capitalize" }}>{p}</span>
+            {user?.[p] ? <Badge tone="ok"><Check size={11} />{t("settings.connected")}</Badge> : <Badge>{t("settings.notConnected")}</Badge>}
+          </div>
+        ))}
+        <div className="spread">
+          <span className="t-strong">Discord</span>
+          {user?.discord
+            ? <Button size="sm" loading={unlinkDiscord.isPending} onClick={() => unlinkDiscord.mutate()}>{t("settings.unlink")}</Button>
+            : providers.data?.discord
+              ? <Button size="sm" loading={linkDiscord.isPending} onClick={() => linkDiscord.mutate()}>{t("settings.link")}</Button>
+              : <Badge>{t("settings.unavailable")}</Badge>}
+        </div>
+      </Section>
 
-        <Card title={t("settings.linked")} icon={LinkIcon}>
-          <Box sx={{ display: "grid", gap: 2 }}>
-            {(["google", "github"] as const).map((p) => (
-              <Box key={p} sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <Text sx={{ fontSize: 1, flex: 1, textTransform: "capitalize" }}>{p}</Text>
-                <Label variant={user?.[p] ? "success" : "secondary"}>
-                  {user?.[p] ? t("settings.linkedYes") : t("settings.linkedNo")}
-                </Label>
-              </Box>
-            ))}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-              <Text sx={{ fontSize: 1, flex: 1 }}>Discord</Text>
-              {user?.discord ? (
-                <Button
-                  size="small"
-                  variant="danger"
-                  disabled={unlinkDiscord.isPending}
-                  onClick={() => unlinkDiscord.mutate()}
-                >
-                  {t("settings.unlink")}
-                </Button>
-              ) : (
-                <Button
-                  size="small"
-                  disabled={linkDiscord.isPending}
-                  onClick={() => linkDiscord.mutate()}
-                >
-                  {t("settings.link")}
-                </Button>
-              )}
-            </Box>
-            {linkDiscord.isError && (
-              <Text sx={{ fontSize: 0, color: "danger.fg" }}>
-                {t("settings.linkUnavailable")}
-              </Text>
-            )}
-          </Box>
-        </Card>
+      <Section title={t("settings.appearance")}>
+        <div className="spread">
+          <span>{t("settings.theme")}</span>
+          <Segmented label={t("settings.theme")} value={mode} onChange={setMode}
+                     items={[{ key: "light", label: t("common.lightTheme") }, { key: "dark", label: t("common.darkTheme") }]} />
+        </div>
+        <div className="spread">
+          <span>{t("settings.language")}</span>
+          <Segmented label={t("settings.language")} value={i18n.language === "zh" ? "zh" : "en"} onChange={setLocale}
+                     items={[{ key: "zh", label: "繁體中文" }, { key: "en", label: "English" }]} />
+        </div>
+      </Section>
 
-        <Card title={t("settings.notifications")} icon={BellIcon}>
-          <CardState loading={prefsQuery.isPending} error={prefsQuery.isError} />
-          {prefs && (
-            <Box sx={{ display: "grid", gap: 3 }}>
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
-                <Box>
-                  <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                    {t("settings.frequency")}
-                  </Text>
-                  <Select
-                    block
-                    value={prefs.frequency}
-                    onChange={(e) =>
-                      setPrefs({ ...prefs, frequency: e.target.value as Preferences["frequency"] })
-                    }
-                  >
-                    <Select.Option value="daily">{t("settings.freqDaily")}</Select.Option>
-                    <Select.Option value="weekly">{t("settings.freqWeekly")}</Select.Option>
-                    <Select.Option value="off">{t("settings.freqOff")}</Select.Option>
-                  </Select>
-                </Box>
-                <Box>
-                  <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                    {t("settings.time")}
-                  </Text>
-                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                    <TextInput
-                      type="number"
-                      min={0}
-                      max={23}
-                      sx={{ width: 64 }}
-                      aria-label={t("settings.hour")}
-                      value={String(prefs.hour)}
-                      onChange={(e) =>
-                        setPrefs({ ...prefs, hour: Number(e.target.value) || 0 })
-                      }
-                    />
-                    <Text>:</Text>
-                    <TextInput
-                      type="number"
-                      min={0}
-                      max={59}
-                      sx={{ width: 64 }}
-                      aria-label={t("settings.minute")}
-                      value={String(prefs.minute)}
-                      onChange={(e) =>
-                        setPrefs({ ...prefs, minute: Number(e.target.value) || 0 })
-                      }
-                    />
-                  </Box>
-                </Box>
-              </Box>
-              <Box>
-                <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                  {t("settings.timezone")}
-                </Text>
-                <TextInput
-                  block
-                  value={prefs.timezone}
-                  onChange={(e) => setPrefs({ ...prefs, timezone: e.target.value })}
-                />
-              </Box>
-              <Box>
-                <Text sx={{ fontSize: 0, color: "fg.muted", display: "block", mb: 1 }}>
-                  {t("settings.channels")}
-                </Text>
-                <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-                  {CHANNELS.map((c) => (
-                    <Box key={c} as="label" sx={{ display: "flex", gap: 1, alignItems: "center", cursor: "pointer" }}>
-                      <Checkbox
-                        checked={prefs.channels.includes(c)}
-                        onChange={(e) => setChannel(c, e.target.checked)}
-                        aria-label={c}
-                      />
-                      <Text sx={{ fontSize: 1 }}>{c}</Text>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-              <Box as="label" sx={{ display: "flex", gap: 2, alignItems: "center", cursor: "pointer" }}>
-                <Checkbox
-                  checked={prefs.dedupe}
-                  onChange={(e) => setPrefs({ ...prefs, dedupe: e.target.checked })}
-                  aria-label={t("settings.dedupe")}
-                />
-                <Text sx={{ fontSize: 1 }}>{t("settings.dedupe")}</Text>
-              </Box>
-              <Button
-                variant="primary"
-                disabled={savePrefs.isPending}
-                onClick={() => savePrefs.mutate(prefs)}
-              >
-                {t("common.save")}
-              </Button>
-            </Box>
-          )}
-        </Card>
-
-        <Card title={t("settings.reminders")} icon={ClockIcon}>
-          <CardState
-            loading={reminders.isPending}
-            error={reminders.isError}
-            empty={reminders.data?.items.length === 0}
-          />
-          <Box sx={{ display: "grid", gap: 2 }}>
-            {reminders.data?.items.map((r) => (
-              <Box key={r.id} sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                <Box sx={{ flex: 1 }}>
-                  <Text sx={{ fontSize: 1, display: "block" }}>{r.text}</Text>
-                  <Text sx={{ fontSize: 0, color: "fg.muted", fontFamily: "mono" }}>
-                    {r.due_at.replace("T", " ").slice(0, 16)}
-                  </Text>
-                </Box>
-                <IconButton
-                  aria-label={t("settings.completeReminder")}
-                  icon={CheckIcon}
-                  size="small"
-                  variant="invisible"
-                  onClick={() => completeReminder.mutate(r.id)}
-                />
-                <IconButton
-                  aria-label={t("common.delete")}
-                  icon={TrashIcon}
-                  size="small"
-                  variant="invisible"
-                  onClick={() => deleteReminder.mutate(r.id)}
-                />
-              </Box>
-            ))}
-            <Box sx={{ display: "grid", gap: 2, mt: 2 }}>
-              <TextInput
-                placeholder={t("settings.reminderPlaceholder")}
-                value={reminderText}
-                onChange={(e) => setReminderText(e.target.value)}
-              />
-              <Box sx={{ display: "flex", gap: 2 }}>
-                <TextInput
-                  sx={{ flex: 1 }}
-                  type="datetime-local"
-                  aria-label={t("settings.reminderDue")}
-                  value={reminderDue}
-                  onChange={(e) => setReminderDue(e.target.value)}
-                />
-                <Button
-                  disabled={!reminderText.trim() || !reminderDue || addReminder.isPending}
-                  onClick={() => addReminder.mutate()}
-                >
-                  {t("settings.addReminder")}
-                </Button>
-              </Box>
-            </Box>
-          </Box>
-        </Card>
-
-        <Card title={t("settings.system")} icon={ServerIcon}>
-          <CardState loading={health.isPending} error={health.isError} />
-          {health.data && (
-            <Box sx={{ display: "grid", gap: 2 }}>
-              <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
-                <Label variant={health.data.status === "ok" ? "success" : "danger"}>
-                  {health.data.status}
-                </Label>
-                <Text sx={{ fontFamily: "mono", fontSize: 0, color: "fg.muted" }}>
-                  {health.data.store_backend}
-                </Text>
-                <Label variant={health.data.scheduler.running ? "success" : "secondary"}>
-                  {health.data.scheduler.running
-                    ? t("settings.schedulerOn")
-                    : t("settings.schedulerOff")}
-                </Label>
-              </Box>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                {Object.entries(health.data.providers).map(([name, ok]) => (
-                  <Label key={name} variant={ok ? "success" : "secondary"}>
-                    {name}
-                  </Label>
+      <Section title={t("settings.notifications")} hint={t("settings.notificationsHint")}>
+        {prefs && (
+          <>
+            <div className="row" style={{ alignItems: "flex-end" }}>
+              <div className="grow">
+                <Field label={t("settings.frequency")}>
+                  {(id) => (
+                    <Select id={id} value={prefs.frequency}
+                            onChange={(e) => setPrefs({ ...prefs, frequency: e.target.value as Preferences["frequency"] })}>
+                      <option value="daily">{t("settings.daily")}</option>
+                      <option value="weekly">{t("settings.weekly")}</option>
+                      <option value="off">{t("settings.off")}</option>
+                    </Select>
+                  )}
+                </Field>
+              </div>
+              <div style={{ width: 120 }}>
+                <Field label={t("settings.time")}>
+                  {(id) => (
+                    <Input id={id} type="time" value={`${String(prefs.hour).padStart(2, "0")}:${String(prefs.minute).padStart(2, "0")}`}
+                           onChange={(e) => {
+                             const [h, m] = e.target.value.split(":").map(Number);
+                             if (!Number.isNaN(h) && !Number.isNaN(m)) setPrefs({ ...prefs, hour: h, minute: m });
+                           }} />
+                  )}
+                </Field>
+              </div>
+            </div>
+            <Field label={t("settings.timezone")} hint={t("settings.timezoneHint")}>
+              {(id) => <Input id={id} value={prefs.timezone} maxLength={64} onChange={(e) => setPrefs({ ...prefs, timezone: e.target.value })} />}
+            </Field>
+            <div className="col">
+              <span className="field-label">{t("settings.channels")}</span>
+              <div className="row-wrap" style={{ gap: 16 }}>
+                {CHANNELS.map((c) => (
+                  <label key={c} className="check">
+                    <input type="checkbox" checked={prefs.channels.includes(c)} onChange={(e) => toggleChannel(c, e.target.checked)} />
+                    {t(`settings.channel.${c}`)}
+                  </label>
                 ))}
-              </Box>
-            </Box>
-          )}
-        </Card>
-      </Box>
-    </Box>
+              </div>
+            </div>
+            <div className="spread">
+              <span>{t("settings.dedupe")}</span>
+              <Switch checked={prefs.dedupe} onChange={(v) => setPrefs({ ...prefs, dedupe: v })} label={t("settings.dedupe")} />
+            </div>
+            <div><Button variant="primary" loading={savePrefs.isPending} onClick={() => savePrefs.mutate(prefs)}>{t("common.save")}</Button></div>
+          </>
+        )}
+      </Section>
+
+      <Section title={t("settings.reminders")} hint={t("settings.remindersHint")}>
+        <form className="row" onSubmit={submitReminder}>
+          <div className="grow">
+            <Input value={reminderText} maxLength={500} onChange={(e) => setReminderText(e.target.value)}
+                   placeholder={t("settings.reminderPlaceholder")} aria-label={t("settings.reminderPlaceholder")} />
+          </div>
+          <div style={{ width: 200 }}>
+            <Input type="datetime-local" value={reminderDue} aria-label={t("settings.reminderDue")}
+                   onChange={(e) => setReminderDue(e.target.value)} />
+          </div>
+          <Button type="submit" loading={addReminder.isPending} disabled={!reminderText.trim() || !reminderDue}>{t("common.add")}</Button>
+        </form>
+        {(reminders.data?.items ?? []).map((r) => (
+          <div key={r.id} className="row">
+            <IconButton icon={Check} label={t("settings.completeReminder")} onClick={() => completeReminder.mutate(r.id)} />
+            <span className="grow">{r.text}</span>
+            <span className="t-meta num">{r.due_at.replace("T", " ").slice(0, 16)}</span>
+            <IconButton icon={Trash2} label={t("common.delete")} onClick={() => deleteReminder.mutate(r.id)} />
+          </div>
+        ))}
+        {reminders.data?.items.length === 0 && <span className="t-meta">{t("settings.noReminders")}</span>}
+      </Section>
+
+      <Section title={t("settings.system")} hint={t("settings.systemHint")}>
+        {health.isError && <Notice tone="danger">{t("common.error")}</Notice>}
+        {health.data && (
+          <>
+            <div className="row-wrap">
+              <Badge tone={health.data.status === "ok" ? "ok" : "danger"}>{health.data.status}</Badge>
+              {health.data.store_backend && <span className="mono t-meta">{health.data.store_backend}</span>}
+              {health.data.scheduler && (
+                <Badge tone={health.data.scheduler.running ? "ok" : undefined}>
+                  {health.data.scheduler.running ? t("settings.schedulerOn") : t("settings.schedulerOff")}
+                </Badge>
+              )}
+            </div>
+            <div className="row-wrap">
+              {Object.entries(health.data.providers ?? {}).map(([name, ok]) => (
+                <Badge key={name} tone={ok ? "ok" : undefined}>{name}</Badge>
+              ))}
+            </div>
+          </>
+        )}
+      </Section>
+    </div>
   );
 }
