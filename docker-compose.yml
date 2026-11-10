@@ -1,6 +1,9 @@
 # 預設單容器（SQLite+FAISS，資料落在 ./data volume）。
 # 要用 Postgres+pgvector：docker compose --profile postgres up，
-# 並在 .env 設 STORE_BACKEND=postgres 與 DATABASE_URL（見 .env.example）。
+# 並在 .env 設 STORE_BACKEND=postgres 與 DATABASE_URL（見 .env.example），
+# 同時必須設定 POSTGRES_PASSWORD（compose 讀取專案根目錄的 .env 或 shell 環境）。
+# api 預設以 APP_ENV=production 啟動：backend/.env 必須有至少 32 字元的 JWT_SECRET。
+# 掛載的 ./backend/data 需可由容器內 uid 10001 寫入：chown -R 10001 backend/data
 services:
   api:
     build: .
@@ -10,8 +13,17 @@ services:
       - ./backend/.env
     environment:
       SCHEDULER_ENABLED: "1"
+      APP_ENV: ${APP_ENV:-production}
     volumes:
       - ./backend/data:/app/backend/data
+    # 縮小容器權限：唯讀根檔案系統、丟棄所有 capability、禁止提權
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   db:
@@ -20,9 +32,11 @@ services:
     environment:
       POSTGRES_DB: scholaragent
       POSTGRES_USER: air
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-air}
+      # 不提供預設密碼：未設定時 Postgres 映像會拒絕啟動，避免帶著眾所周知的密碼上線
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     ports:
-      - "5432:5432"
+      # 只綁本機：api 容器走 compose 內部網路連線，不需要對外開放資料庫
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
