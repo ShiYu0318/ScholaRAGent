@@ -137,6 +137,9 @@ def build_app(data_dir):
     embedder, llm = FakeEmbedder(), FakeLLM()
     store = SqliteFaissStore(db_path=data_dir / "demo.db", embedder=embedder)
     store_module.set_store(store)
+    # Touch the vector store now: its first use imports FAISS and PyTorch, which takes
+    # many seconds on a cold machine and would otherwise land on the first user action.
+    store.vector  # noqa: B018
     ask_service = ask.AskService(store, llm=llm)
     ask.set_ask_service(ask_service)
     research.set_research_service(research.ResearchService(store, llm=llm, ask_service=ask_service))

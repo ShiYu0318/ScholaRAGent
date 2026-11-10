@@ -8,6 +8,11 @@ sources, throwaway data) and drives the built frontend with Playwright.
     E2E=1 uv run pytest tests/e2e -q
 
 Skipped unless E2E=1, because it needs the frontend build and a browser.
+
+Assertions target durable outcomes (a paper is in the library, the text survives a
+reload) rather than transient ones (a toast that lasts four seconds, an "unsaved"
+indicator that lasts one), and use Playwright's auto-retrying `expect`, so the test
+does not depend on how busy the machine is.
 """
 import io
 import os
@@ -20,6 +25,11 @@ import zipfile
 from pathlib import Path
 
 import pytest
+
+try:
+    from playwright.sync_api import expect
+except ImportError:        # collected without the dev group installed
+    expect = None
 
 pytestmark = pytest.mark.skipif(not os.getenv("E2E"), reason="set E2E=1 to run the UI test")
 
@@ -73,7 +83,8 @@ def page(base_url):
             "localStorage.setItem('scholaragent.locale','en');"
             "localStorage.setItem('scholaragent.theme','light');")
         pg = context.new_page()
-        pg.set_default_timeout(10_000)
+        pg.set_default_timeout(15_000)
+        expect.set_options(timeout=15_000)      # CI runners are slower than a laptop
         errors = []
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
@@ -121,8 +132,7 @@ def test_find_and_import_papers_into_the_project(page):
                   "ARES: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems"):
         page.get_by_role("checkbox", name=title).check()
     page.get_by_role("button", name="Import 2 selected").click()
-    page.get_by_text("Imported 2 papers").wait_for()
-    assert page.get_by_text("In library").count() == 2
+    expect(page.get_by_text("In library")).to_have_count(2)
 
 
 def test_read_a_paper_and_take_notes(page):
@@ -146,12 +156,12 @@ def test_ask_within_the_project_and_save_the_answer(page):
     box.fill("How is RAG evaluated?")
     box.press("Enter")
     page.get_by_text("Citation accuracy").wait_for()
-    page.get_by_role("button", name="Save as note").wait_for()
     # answers cite only the project's two papers
-    assert page.locator(".cite").count() == 2
+    expect(page.locator(".cite")).to_have_count(2)
     page.get_by_role("button", name="Save as note").click()
-    page.get_by_role("dialog", name="Save as document").get_by_role("button", name="Save").click()
-    page.get_by_text("Saved as a document").wait_for()
+    dialog = page.get_by_role("dialog", name="Save as document")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog).to_be_hidden()            # the dialog closes once the save succeeded
 
 
 def test_synthesize_a_review_and_keep_it(page):
@@ -161,8 +171,12 @@ def test_synthesize_a_review_and_keep_it(page):
     page.get_by_role("heading", name="Themes").wait_for()
     page.get_by_text("Based on 2 papers").wait_for()
     page.get_by_role("button", name="Save as document").click()
-    page.get_by_role("dialog", name="Save as document").get_by_role("button", name="Save").click()
-    page.get_by_role("button", name="Open", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Save as document")
+    dialog.get_by_role("button", name="Save").click()
+    expect(dialog).to_be_hidden()
+    # the saved review is now in the document list; open it from there
+    go(page, "/write")
+    page.get_by_role("button", name="Literature review: RAG evaluation").click()
     page.wait_for_url("**/write/*")
 
 
@@ -171,9 +185,9 @@ def test_edit_the_document_with_autosave(page):
     page.get_by_role("button", name="Edit", exact=True).click()
     editor = page.get_by_label("Content")
     editor.press("End")
-    editor.type("\n\nMy own conclusion.")
-    page.get_by_text("Unsaved changes").wait_for()
-    page.get_by_text("Saved 2").wait_for()                     # "Saved <date>"
+    with page.expect_response(lambda r: "/api/documents/" in r.url
+                              and r.request.method == "PATCH" and r.ok):
+        editor.type("\n\nMy own conclusion.")              # autosave fires after a pause
     page.reload()
     page.get_by_text("My own conclusion.").wait_for()
     page.get_by_text("References (2)").wait_for()
@@ -200,7 +214,7 @@ def test_command_palette_jumps_between_pages(page):
     palette.get_by_role("textbox").fill("libr")
     page.keyboard.press("Enter")
     page.get_by_role("heading", name="Library", exact=True).wait_for()
-    assert page.get_by_role("tab", name="Papers").inner_text().endswith("2")
+    expect(page.get_by_role("tab", name="Papers")).to_contain_text("2")
 
 
 def test_changing_the_password_and_signing_out_everywhere(page):
@@ -208,7 +222,7 @@ def test_changing_the_password_and_signing_out_everywhere(page):
     page.get_by_label("Current password").fill(PASSWORD)
     page.get_by_label("New password").fill(NEW_PASSWORD)
     page.get_by_role("button", name="Change password").click()
-    page.get_by_text("Password changed").wait_for()
+    expect(page.get_by_label("New password")).to_have_value("")   # cleared on success
     # this device stays signed in with the reissued token
     page.reload()
     page.get_by_role("heading", name="Settings").wait_for()

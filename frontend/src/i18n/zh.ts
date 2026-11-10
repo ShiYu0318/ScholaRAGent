@@ -318,6 +318,7 @@ export default {
           "placeholder": "報告的主題"
         }
       },
+      "titled": "{{tool}}：{{topic}}",
       "topic": "主題",
       "topicOptional": "主題（選填，留空則比較來源內的所有文獻）",
       "source": "文獻來源",

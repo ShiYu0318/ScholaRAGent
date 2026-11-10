@@ -14,10 +14,13 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // 重量級依賴拆成獨立 vendor chunk：改動應用程式碼時瀏覽器仍可沿用快取
-        manualChunks: {
-          react: ["react", "react-dom", "react-router-dom"],
-          d3: ["d3"],
-          markdown: ["react-markdown", "remark-gfm"],
+        // Vite 8（Rolldown）只接受函式形式
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return "react";
+          if (/node_modules\/d3(-[a-z]+)?\//.test(id)) return "d3";
+          if (/node_modules\/(react-markdown|remark-|micromark|mdast-|unified|hast-|unist-|vfile)/.test(id)) return "markdown";
+          return undefined;
         },
       },
     },

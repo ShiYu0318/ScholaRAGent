@@ -2,7 +2,7 @@
 # 容器內沿用 monorepo 佈局（/app/backend + /app/frontend/dist），路徑推導與本機一致。
 # docker build -t scholaragent . && docker run --env-file backend/.env -p 8000:8000 scholaragent
 
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
