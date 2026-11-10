@@ -108,3 +108,84 @@ def test_project_validation_and_caps(api, auth, monkeypatch):
                     json={"paper_ids": ["p1", "p2"]}).status_code == 422
     monkeypatch.setattr(projects, "MAX_PROJECTS_PER_USER", 1)
     assert api.post("/api/projects", headers=auth, json={"name": "second"}).status_code == 422
+
+
+# ---- 總覽 ----
+def test_overview_walks_through_the_research_stages(api, auth):
+    p = _project(api, auth)
+    base = f"/api/projects/{p['id']}"
+
+    def overview():
+        return api.get(f"{base}/overview", headers=auth).json()
+
+    assert overview()["next_step"] == "collect"
+
+    api.post(f"{base}/papers", headers=auth, json={"paper_ids": ["p1", "p2", "p3"]})
+    o = overview()
+    assert o["next_step"] == "read"
+    assert o["stages"]["collect"] == {"count": 3, "done": True}
+    assert o["stages"]["read"]["to_read"] == 3
+
+    api.post("/api/reading", headers=auth, json={"paper_id": "p1", "state": "done"})
+    api.post("/api/reading", headers=auth, json={"paper_id": "p2", "state": "reading"})
+    o = overview()
+    assert o["next_step"] == "ask"
+    assert (o["stages"]["read"]["done"], o["stages"]["read"]["reading"],
+            o["stages"]["read"]["to_read"], o["stages"]["read"]["total"]) == (True, 1, 1, 3)
+    assert o["stages"]["read"]["count"] == 1
+
+    store = store_module.get_store()
+    user_id = store.get_user_by_email("owner@example.com")["id"]
+    store.create_conversation(user_id, title="Q1", project_id=p["id"])
+    assert overview()["next_step"] == "synthesize"
+
+    api.post("/api/documents", headers=auth,
+             json={"title": "Survey", "kind": "review", "project_id": p["id"]})
+    assert overview()["next_step"] == "write"
+
+    api.post("/api/documents", headers=auth,
+             json={"title": "Paper draft", "kind": "draft", "project_id": p["id"]})
+    o = overview()
+    assert o["next_step"] == "export"
+    assert all(stage["done"] for stage in o["stages"].values())
+    assert [d["title"] for d in o["recent_documents"]] == ["Paper draft", "Survey"]
+    assert o["recent_conversations"][0]["title"] == "Q1"
+
+
+def test_overview_is_owner_only(api, auth, other):
+    p = _project(api, auth)
+    assert api.get(f"/api/projects/{p['id']}/overview", headers=other).status_code == 404
+    assert api.get(f"/api/projects/{p['id']}/export", headers=other).status_code == 404
+
+
+# ---- 匯出 ----
+def test_export_bundles_references_notes_and_documents(api, auth):
+    import io
+    import zipfile
+
+    p = _project(api, auth, name="RAG 評估 / eval")
+    base = f"/api/projects/{p['id']}"
+    api.post(f"{base}/papers", headers=auth, json={"paper_ids": ["p1", "p2"]})
+    api.post("/api/reading", headers=auth,
+             json={"paper_id": "p1", "state": "done", "tags": ["core"], "note": "關鍵論文"})
+    for title in ("Survey", "Survey", "../../escape"):
+        api.post("/api/documents", headers=auth,
+                 json={"title": title, "content": "body", "kind": "review",
+                       "project_id": p["id"], "paper_ids": ["p1"]})
+    api.post("/api/documents", headers=auth, json={"title": "not in project"})
+
+    resp = api.get(f"{base}/export", headers=auth)
+    assert resp.status_code == 200 and resp.headers["content-type"] == "application/zip"
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    names = zf.namelist()
+    assert {"README.md", "references.bib", "notes.md"} <= set(names)
+    docs = [n for n in names if n.startswith("documents/")]
+    assert len(docs) == 3 and len(set(docs)) == 3
+    assert all(".." not in n and not n.startswith("/") for n in names)   # 無路徑穿越
+
+    assert zf.read("references.bib").decode().count("@misc{") == 2
+    notes = zf.read("notes.md").decode()
+    assert "關鍵論文" in notes and "Tags: core" in notes and "Status: done" in notes
+    readme = zf.read("README.md").decode()
+    assert "How should RAG be evaluated?" in readme and "Paper 1" in readme
+    assert "## References" in zf.read(docs[0]).decode()
