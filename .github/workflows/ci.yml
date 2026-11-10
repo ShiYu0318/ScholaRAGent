@@ -1,5 +1,9 @@
 name: CI
 
+# 最小權限：工作流程只需要讀取程式碼
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -34,6 +38,11 @@ jobs:
           enable-cache: true
       - run: uv sync --frozen
       - run: uv run pytest -q
+      # 已知弱點掃描：只看實際部署的相依套件（不含 dev 群組）
+      - name: Audit Python dependencies
+        run: |
+          uv export --frozen --no-dev --no-emit-project --no-hashes -o requirements.audit.txt
+          uvx pip-audit -r requirements.audit.txt --disable-pip --no-deps
 
   frontend:
     runs-on: ubuntu-latest
@@ -48,12 +57,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: Audit npm dependencies
+        run: npm audit --omit=dev --audit-level=high
       - run: npx tsc --noEmit
       - run: npm run build
 
   docker:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
