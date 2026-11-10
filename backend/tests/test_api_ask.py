@@ -161,3 +161,29 @@ def test_generation_errors_do_not_leak_exception_details(api, auth):
     finally:
         ask_module.set_ask_service(prev)
     assert "gsk_live_secret" not in resp.text
+
+
+def test_share_can_be_revoked(api, auth):
+    api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    conv_id = api.get("/api/conversations", headers=auth).json()["items"][0]["id"]
+    token = api.post(f"/api/conversations/{conv_id}/share", headers=auth).json()["token"]
+    assert api.get(f"/api/shared/{token}").status_code == 200
+
+    assert api.delete(f"/api/conversations/{conv_id}/share", headers=auth).status_code == 204
+    assert api.get(f"/api/shared/{token}").status_code == 404
+    # 重新分享會拿到不同的 token，舊連結不會復活
+    new = api.post(f"/api/conversations/{conv_id}/share", headers=auth).json()["token"]
+    assert new != token
+    assert api.get(f"/api/shared/{token}").status_code == 404
+
+
+def test_cannot_revoke_someone_elses_share(api, auth):
+    api.post("/api/ask", json={"question": "what?"}, headers=auth)
+    conv_id = api.get("/api/conversations", headers=auth).json()["items"][0]["id"]
+    token = api.post(f"/api/conversations/{conv_id}/share", headers=auth).json()["token"]
+    other = api.post("/auth/register",
+                     json={"email": "o@b.c", "password": "password123"}).json()["token"]
+    resp = api.delete(f"/api/conversations/{conv_id}/share",
+                      headers={"Authorization": f"Bearer {other}"})
+    assert resp.status_code == 404
+    assert api.get(f"/api/shared/{token}").status_code == 200

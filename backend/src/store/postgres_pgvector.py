@@ -544,7 +544,15 @@ class PostgresPgvectorStore(Store):
                    (token, conv_id))
         return token
 
+    def unshare_conversation(self, conv_id, user_id):
+        cur = self._exec(
+            "UPDATE conversations SET share_token = NULL WHERE id = %s AND user_id = %s",
+            (conv_id, user_id))
+        return cur.rowcount > 0
+
     def get_shared_conversation(self, token):
+        if not token:
+            return None
         conv = self._one("SELECT * FROM conversations WHERE share_token = %s", (token,))
         if not conv:
             return None
