@@ -1,8 +1,31 @@
 """共用測試工具：離線用的 FakeEmbedder 與資料路徑隔離。"""
 import hashlib
+import os
 
-import numpy as np
-import pytest
+# 必須在 import src.config 之前執行：config 會載入 backend/.env，但不覆蓋已存在的
+# 環境變數。這裡先放入假值，測試就拿不到真實金鑰；LLM 端點指向本機關閉的連接埠，
+# 漏了替身的測試會立刻連線失敗，而不是悄悄用真實金鑰打外部服務。
+_ISOLATED_ENV = {
+    "GROQ_API_KEY": "test-key-not-real",
+    "GROQ_BASE_URL": "http://127.0.0.1:9/v1",
+    "APP_ENV": "development",
+    "JWT_SECRET": "",
+    "SCHEDULER_ENABLED": "0",
+    "STORE_BACKEND": "sqlite",
+    "DATABASE_URL": "",
+    "TRUST_PROXY": "0",
+    "RATE_LIMIT_ENABLED": "1",
+}
+for _name in ("DISCORD_BOT_TOKEN", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "SMTP_HOST",
+              "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "EMAIL_TO", "LINE_CHANNEL_TOKEN",
+              "LINE_TO", "GITHUB_TOKEN", "X_BEARER_TOKEN", "GOOGLE_CLIENT_ID",
+              "GOOGLE_CLIENT_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET",
+              "DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET"):
+    _ISOLATED_ENV[_name] = ""
+os.environ.update(_ISOLATED_ENV)
+
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
 
 
 def _stable_hash(token):
@@ -56,3 +79,4 @@ def make_paper(pid, title, abstract="", **extra):
     }
     paper.update(extra)
     return paper
+
