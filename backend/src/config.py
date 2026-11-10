@@ -79,6 +79,11 @@ API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 # 部署在反向代理後方時設 1，才信任 X-Forwarded-For / X-Forwarded-Proto
 TRUST_PROXY = os.getenv("TRUST_PROXY", "0") in ("1", "true", "True")
+# 請求 body 大小上限（bytes），預設 1 MB
+MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(1024 * 1024)))
+# Swagger / ReDoc：development 預設開，production 預設關
+_docs_default = "0" if APP_ENV == "production" else "1"
+API_DOCS_ENABLED = os.getenv("API_DOCS_ENABLED", _docs_default) in ("1", "true", "True")
 # 限流（行程內滑動視窗）
 RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "1") in ("1", "true", "True")
 RATE_LIMIT_LOGIN_PER_MIN = int(os.getenv("RATE_LIMIT_LOGIN_PER_MIN", "10"))

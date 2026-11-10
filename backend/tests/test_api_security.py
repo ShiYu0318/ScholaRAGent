@@ -66,3 +66,67 @@ def test_register_with_long_multibyte_password_succeeds(api):
     resp = api.post("/auth/register",
                     json={"email": "long@example.com", "password": "密" * 60})
     assert resp.status_code == 201
+
+
+# ---- 標頭 ----
+def test_security_headers_on_api_responses(api):
+    h = api.get("/api/health").headers
+    assert h["x-content-type-options"] == "nosniff"
+    assert h["x-frame-options"] == "DENY"
+    assert h["referrer-policy"] == "no-referrer"
+    assert "frame-ancestors 'none'" in h["content-security-policy"]
+    assert "script-src 'self'" in h["content-security-policy"]
+    assert h["cache-control"] == "no-store"
+
+
+def test_security_headers_on_error_responses(api):
+    h = api.get("/auth/me").headers
+    assert h["x-content-type-options"] == "nosniff"
+
+
+def test_hsts_only_when_served_over_https(api, monkeypatch):
+    assert "strict-transport-security" not in api.get("/api/health").headers
+    monkeypatch.setattr(config, "API_PUBLIC_URL", "https://api.example.com")
+    assert "max-age" in api.get("/api/health").headers["strict-transport-security"]
+
+
+def test_docs_disabled_when_configured(monkeypatch, tmp_path, fake_embedder):
+    from src.api.app import create_app
+    monkeypatch.setattr(config, "API_DOCS_ENABLED", False)
+    client = TestClient(create_app())
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+# ---- body 大小 ----
+def test_oversized_body_rejected_with_413(api, monkeypatch):
+    headers = _token(api)
+    big = "x" * (config.MAX_BODY_BYTES + 10)
+    resp = api.post("/api/memory", json={"content": big}, headers=headers)
+    assert resp.status_code == 413
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+
+def test_oversized_chunked_body_rejected(api):
+    headers = _token(api)
+
+    def chunks():
+        yield b'{"content": "'
+        for _ in range(12):
+            yield b"x" * (config.MAX_BODY_BYTES // 10)
+        yield b'"}'
+
+    resp = api.post("/api/memory", content=chunks(),
+                    headers={**headers, "Content-Type": "application/json"})
+    assert resp.status_code == 413
+
+
+def test_normal_body_passes(api, tmp_path, monkeypatch):
+    from src.api.routers import extras
+    from src.memory.memory_store import MemoryStore
+    prev = extras.set_memory(MemoryStore(path=tmp_path / "mem.json"))
+    try:
+        resp = api.post("/api/memory", json={"content": "hello"}, headers=_token(api))
+        assert resp.status_code == 201
+    finally:
+        extras.set_memory(prev)

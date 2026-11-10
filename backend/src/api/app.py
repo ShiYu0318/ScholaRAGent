@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src import config
 from src.api import auth as auth_lib
+from src.api.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from src.api.ratelimit import RateLimiter
 from src.api.routers import ask as ask_router
 from src.api.routers import auth as auth_router
@@ -48,15 +49,21 @@ def create_app() -> FastAPI:
         description="AI 研究副駕：RAG 問答、GraphRAG、深度研究、文獻工具、個人化推送。",
         version="2.0.0",
         lifespan=_lifespan,
+        docs_url="/docs" if config.API_DOCS_ENABLED else None,
+        redoc_url="/redoc" if config.API_DOCS_ENABLED else None,
+        openapi_url="/openapi.json" if config.API_DOCS_ENABLED else None,
     )
     app.state.limiter = RateLimiter()
+    app.add_middleware(BodySizeLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.CORS_ORIGINS,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
+    # 最後加入＝最外層：連 CORS 預檢與 413 回應都帶安全標頭
+    app.add_middleware(SecurityHeadersMiddleware)
     app.include_router(auth_router.router)
     app.include_router(health_router.router)
     app.include_router(ask_router.router)
