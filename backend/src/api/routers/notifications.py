@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from src.api.validators import TimezoneName
 from src.api.deps import get_current_user, get_store
 from src.store.base import Store
 
@@ -16,12 +17,12 @@ class PreferencesBody(BaseModel):
     frequency: Literal["daily", "weekly", "off"] | None = None
     hour: int | None = Field(default=None, ge=0, le=23)
     minute: int | None = Field(default=None, ge=0, le=59)
-    timezone: str | None = None
+    timezone: TimezoneName | None = None
     quiet_start: int | None = Field(default=None, ge=0, le=23)
     quiet_end: int | None = Field(default=None, ge=0, le=23)
-    min_score: float | None = Field(default=None, ge=0.0)
+    min_score: float | None = Field(default=None, ge=0.0, le=1000.0)
     dedupe: bool | None = None
-    channels: list[Channel] | None = None
+    channels: list[Channel] | None = Field(default=None, max_length=4)
 
 
 @router.get("/notifications/preferences")

@@ -5,11 +5,14 @@ memory 與 agent 走模組級注入點（測試替身）；agent 需 GROQ_API_KE
 """
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src import config
 from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.validators import PaperId
 from src.api.deps import get_current_user, get_store
 from src.rag.evaluation import faithfulness, precision_at_k, recall, reciprocal_rank
 from src.store.base import Store
@@ -53,14 +56,19 @@ def set_memory(memory):
     return prev
 
 
+MAX_MEMORY_ITEMS = 500
+
+
 class MemoryBody(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
-    kind: str = Field(default="note", max_length=40)
+    kind: str = Field(default="note", pattern=r"^[a-z][a-z0-9_-]{0,39}$")
 
 
 @router.get("/memory")
-def list_memory(kind: str | None = None, contains: str | None = None,
-                limit: int = 50, user=Depends(get_current_user)):
+def list_memory(kind: str | None = Query(default=None, max_length=40),
+                contains: str | None = Query(default=None, max_length=200),
+                limit: int = Query(default=50, ge=1, le=200),
+                user=Depends(get_current_user)):
     items = get_memory().filter(str(user["id"]), kind=kind,
                                 contains=contains, limit=limit)
     return {"items": items}
@@ -68,6 +76,9 @@ def list_memory(kind: str | None = None, contains: str | None = None,
 
 @router.post("/memory", status_code=201)
 def add_memory(body: MemoryBody, user=Depends(get_current_user)):
+    memory = get_memory()
+    if len(memory.all(str(user["id"]))) >= MAX_MEMORY_ITEMS:
+        raise HTTPException(status_code=422, detail=f"記憶最多 {MAX_MEMORY_ITEMS} 則")
     return get_memory().add(str(user["id"]), body.content, kind=body.kind)
 
 
@@ -98,14 +109,15 @@ def set_judge_llm(llm):
 class EvalBody(BaseModel):
     engine: str = Field(default="offline", pattern="^(offline|judge)$")
     # offline：確定性排序/重疊指標
-    retrieved_ids: list[str] | None = None
-    relevant_ids: list[str] | None = None
+    retrieved_ids: list[PaperId] | None = Field(default=None, max_length=200)
+    relevant_ids: list[PaperId] | None = Field(default=None, max_length=200)
     k: int = Field(default=4, ge=1, le=50)
     # judge：RAGAS 式 LLM-as-judge 指標
-    question: str | None = None
-    answer: str | None = None
-    contexts: list[str] | None = None
-    ground_truth: str | None = None
+    question: str | None = Field(default=None, max_length=4000)
+    answer: str | None = Field(default=None, max_length=20000)
+    contexts: list[Annotated[str, Field(max_length=8000)]] | None = Field(
+        default=None, max_length=20)
+    ground_truth: str | None = Field(default=None, max_length=20000)
 
 
 @router.post("/eval", dependencies=[Depends(llm_limit)])

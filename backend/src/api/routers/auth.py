@@ -20,21 +20,24 @@ register_limit = limit_ip("register", config.RATE_LIMIT_REGISTER_PER_HOUR, 3600)
 oauth_limit = limit_ip("oauth", 30, 60)
 
 
+LOCALE_PATTERN = r"^[a-z]{2}(-[A-Za-z]{2,4})?$"
+
+
 class RegisterBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    display_name: str | None = None
-    locale: str = "en"
+    display_name: str | None = Field(default=None, max_length=80)
+    locale: str = Field(default="en", pattern=LOCALE_PATTERN)
 
 
 class LoginBody(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class UpdateMeBody(BaseModel):
-    display_name: str | None = None
-    locale: str | None = None
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    locale: str | None = Field(default=None, pattern=LOCALE_PATTERN)
     password: str | None = Field(default=None, min_length=8, max_length=128)
     current_password: str | None = Field(default=None, max_length=128)
 

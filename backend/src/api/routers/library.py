@@ -2,22 +2,29 @@
 import io
 import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.validators import PaperId, Tag
 from src.api.deps import get_current_user, get_store
 from src.api.services.library import get_library_service
 from src.store.base import Store
 
 router = APIRouter(prefix="/api", tags=["library"])
 
+ReadingState = Literal["to-read", "reading", "done"]
+
 
 @router.get("/papers")
-def list_papers(limit: int = 50, source: str | None = None, query: str | None = None,
+def list_papers(limit: int = Query(default=50, ge=1, le=200),
+                source: str | None = Query(default=None, max_length=40),
+                query: str | None = Query(default=None, max_length=200),
                 _user=Depends(get_current_user)):
-    return get_library_service().papers(limit=min(limit, 200), source=source, query=query)
+    return get_library_service().papers(limit=limit, source=source, query=query)
 
 
 @router.get("/paper/{paper_id}")
@@ -38,15 +45,16 @@ def fetch_daily(body: DailyBody | None = None, _user=Depends(get_current_user)):
 
 
 @router.get("/daily/personalized")
-def personalized_daily(top_n: int = 5, user=Depends(get_current_user)):
-    items = get_library_service().personalized(user["id"], top_n=min(top_n, 20))
+def personalized_daily(top_n: int = Query(default=5, ge=1, le=20), user=Depends(get_current_user)):
+    items = get_library_service().personalized(user["id"], top_n=top_n)
     return {"items": items}
 
 
 class InteractionBody(BaseModel):
-    action: str = Field(min_length=1, max_length=40)
-    paper_id: str | None = None
-    value: float = 1.0
+    # action 會成為偏好模型的特徵名；value 會加總進全站排序，必須有界
+    action: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+    paper_id: PaperId | None = None
+    value: float = Field(default=1.0, ge=-5.0, le=5.0)
 
 
 @router.post("/interactions", status_code=201)
@@ -62,19 +70,19 @@ def log_interaction(body: InteractionBody, user=Depends(get_current_user),
 
 # ---- 閱讀看板 ----
 class ReadingBody(BaseModel):
-    paper_id: str
-    title: str = ""
-    state: str = "to-read"
-    tags: list[str] = []
-    note: str = ""
+    paper_id: PaperId
+    title: str = Field(default="", max_length=500)
+    state: ReadingState = "to-read"
+    tags: list[Tag] = Field(default_factory=list, max_length=20)
+    note: str = Field(default="", max_length=5000)
 
 
 class ReadingStateBody(BaseModel):
-    state: str
+    state: ReadingState
 
 
 @router.get("/reading")
-def reading_items(state: str | None = None, user=Depends(get_current_user),
+def reading_items(state: ReadingState | None = None, user=Depends(get_current_user),
                   store: Store = Depends(get_store)):
     return {"items": store.reading_items(user["id"], state=state)}
 

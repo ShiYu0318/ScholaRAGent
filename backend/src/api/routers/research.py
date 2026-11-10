@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.ratelimit import heavy_limit, llm_limit
+from src.api.validators import PaperId
 from src.api.deps import get_current_user
 from src.api.routers.ask import sse
 from src.api.services.research import get_research_service
@@ -19,9 +20,13 @@ class TopicBody(BaseModel):
 
 
 class CompareBody(BaseModel):
-    topic: str | None = None
-    paper_ids: list[str] | None = None
+    topic: str | None = Field(default=None, max_length=500)
+    paper_ids: list[PaperId] | None = Field(default=None, max_length=20)
     k: int = Field(default=6, ge=2, le=20)
+
+
+class ExplainBody(BaseModel):
+    paper_id: PaperId
 
 
 class DeepResearchBody(BaseModel):
@@ -74,11 +79,8 @@ def bibtex(body: CompareBody, _user=Depends(get_current_user)):
 
 
 @router.post("/explain", dependencies=[Depends(llm_limit)])
-def explain(body: dict, _user=Depends(get_current_user)):
-    paper_id = (body or {}).get("paper_id", "")
-    if not paper_id:
-        raise HTTPException(status_code=422, detail="需提供 paper_id")
-    result = get_research_service().explain(paper_id)
+def explain(body: ExplainBody, _user=Depends(get_current_user)):
+    result = get_research_service().explain(body.paper_id)
     if result is None:
         raise HTTPException(status_code=404, detail="論文不存在")
     return result

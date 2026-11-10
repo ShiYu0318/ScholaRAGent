@@ -1,5 +1,5 @@
 """對話端點：列表/搜尋、讀取、改名、刪除、分享。"""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src import config
@@ -14,10 +14,11 @@ class RenameBody(BaseModel):
 
 
 @router.get("/conversations")
-def list_conversations(query: str | None = None, limit: int = 50,
+def list_conversations(query: str | None = Query(default=None, max_length=200),
+                       limit: int = Query(default=50, ge=1, le=200),
                        user=Depends(get_current_user),
                        store: Store = Depends(get_store)):
-    items = store.list_conversations(user["id"], query=query, limit=min(limit, 200))
+    items = store.list_conversations(user["id"], query=query, limit=limit)
     return {"items": items}
 
 

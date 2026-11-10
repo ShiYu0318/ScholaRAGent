@@ -9,7 +9,8 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
 @router.get("/citation", dependencies=[Depends(llm_limit)])
-def citation_graph(seed: str = Query(min_length=1), title: str | None = None,
+def citation_graph(seed: str = Query(min_length=1, max_length=300),
+                   title: str | None = Query(default=None, max_length=500),
                    _user=Depends(get_current_user)):
     data = get_graph_service().citation(seed, title=title)
     if not data["nodes"]:
@@ -25,6 +26,6 @@ def concept_graph(limit: int = Query(default=30, ge=1, le=200),
 
 
 @router.get("/global", dependencies=[Depends(llm_limit)])
-def global_search(query: str = Query(min_length=1),
+def global_search(query: str = Query(min_length=1, max_length=500),
                   _user=Depends(get_current_user)):
     return get_graph_service().global_answer(query)
