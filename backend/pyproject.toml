@@ -3,7 +3,7 @@ name = "scholaragent"
 version = "0.1.0"
 description = "Research copilot: RAG question answering, GraphRAG, deep research and writing tools"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "arxiv>=4.1.0",
     "openai>=3.51.0",

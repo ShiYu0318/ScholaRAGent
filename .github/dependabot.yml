@@ -23,3 +23,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Native dependencies (onnxruntime, torch, faiss) lag new CPython releases by months;
+      # move to a new Python version deliberately, together with backend/.python-version
+      # and requires-python, once they all publish wheels for it. Patch updates still apply.
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
