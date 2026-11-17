@@ -9,7 +9,7 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-FROM python:3.13-slim AS api
+FROM python:3.15-slim AS api
 # 釘住 uv 版本：latest 會讓建置結果隨時間改變，也擴大供應鏈風險
 COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /uvx /usr/local/bin/
 WORKDIR /app/backend
