@@ -1,0 +1,31 @@
+name: Bug report
+description: Something does not work as described
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead. Include error text.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The smallest set of steps. Mention the page, the endpoint, or the test that shows it.
+      placeholder: |
+        1. Open a project
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit, store backend (sqlite / postgres), browser if it is a UI problem, Docker or local.
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested fix
+      description: Optional. Where you think the cause is, if you looked.
