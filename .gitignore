@@ -13,3 +13,4 @@ data
 docs
 scripts
 diff.patch
+e2e-artifacts/
