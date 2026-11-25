@@ -7,6 +7,8 @@ sources, throwaway data) and drives the built frontend with Playwright.
     cd ../backend && uv run playwright install chromium
     E2E=1 uv run pytest tests/e2e -q
 
+A failing step leaves a full-page screenshot in backend/e2e-artifacts/ (see conftest.py).
+
 Skipped unless E2E=1, because it needs the frontend build and a browser.
 
 Assertions target durable outcomes (a paper is in the library, the text survives a
@@ -91,8 +93,6 @@ def page(base_url):
         pg.base = base_url
         pg.errors = errors
         yield pg
-        if os.getenv("E2E_SHOT"):
-            pg.screenshot(path=os.environ["E2E_SHOT"])
         browser.close()
 
 

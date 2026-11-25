@@ -1177,6 +1177,9 @@ cd ../backend && uv run playwright install chromium
 E2E=1 uv run pytest tests/e2e -q
 ```
 
+When a step fails, a full-page screenshot of that moment is saved to
+`backend/e2e-artifacts/`; in CI the folder is uploaded as the `e2e-screenshots` artifact.
+
 The same demo server is handy for looking at the interface by hand:
 `uv run python -m tests.e2e.demo_server --port 8765`.
 

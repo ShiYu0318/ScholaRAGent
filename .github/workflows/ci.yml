@@ -89,6 +89,14 @@ jobs:
         env:
           E2E: "1"
         run: uv run pytest tests/e2e -q
+      - name: Upload screenshots of failing steps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: backend/e2e-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
 
   docker:
     runs-on: ubuntu-latest

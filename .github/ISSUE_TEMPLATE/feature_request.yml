@@ -1,0 +1,30 @@
+name: Feature or change
+description: An improvement to the research workflow, the API or the project itself
+labels: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What a researcher (or a maintainer) cannot do today, or does with too much effort.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed change
+      description: What should exist afterwards — endpoints, screens, settings.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: How we will know it works. Tests or checks that should pass.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Anything stored or sent to the model has a length or count limit
+        - label: Anything owned by a user is queried with that user's id
